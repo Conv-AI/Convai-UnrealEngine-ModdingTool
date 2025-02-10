@@ -1,0 +1,39 @@
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore system-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE-specific files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Ignore Unreal Engine-specific files
+Saved/
+Intermediate/
+DerivedDataCache/
+*.sln
+*.uprojectdirs
+
+# Ignore Unreal Engine Build Artifacts
+Binaries/
+Build/
+*.log
+*.tmp
+
+# Ignore User Configuration Files
+Config/DefaultEditorPerProjectUserSettings.ini
+Config/DefaultEditorUserSettings.ini
+
+# Ignore Generated Files
+*.generated.*
+
+# Ignore Custom Temporary Files
+temp/
+*.bak
