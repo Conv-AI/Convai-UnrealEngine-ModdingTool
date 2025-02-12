@@ -3,12 +3,13 @@ import sys
 
 from core.asset_manager import generate_project_name, get_asset_id, save_asset_metadata
 from core.download_utils import download_and_extract_plugin
-from core.unreal_project import build_project_structure, extract_engine_version, get_unreal_engine_path, run_unreal_build
+from core.unreal_project import build_project_structure, extract_engine_version, get_unreal_engine_path, is_plugin_installed, run_unreal_build
 
 SERVER_URL = "http://localhost:5000/getprojectname"
 
 def main():
     """Main execution flow for setting up an Unreal Engine project."""
+    
     if getattr(sys, 'frozen', False):  # Check if running as an exe
         script_dir = os.path.dirname(os.path.abspath(sys.executable))
     else:
@@ -35,7 +36,10 @@ def main():
     download_and_extract_plugin(project_dir)    
     run_unreal_build(unreal_engine_path, project_name, project_dir)
 
-    #check if convai plugin is installed or not
-    
+    if not is_plugin_installed(unreal_engine_path, "Convai"):
+        print("❌ Convai plugin is not installed. Install it from the marketplace.")
+
+    input("Press Enter to exit...")  
+
 if __name__ == "__main__":
     main()
