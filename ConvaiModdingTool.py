@@ -3,7 +3,7 @@ import sys
 
 from core.asset_manager import generate_project_name, get_asset_id, save_asset_metadata
 from core.download_utils import download_and_extract_plugin
-from core.unreal_project import build_project_structure, enable_convai_plugin_in_uproject, extract_engine_version, get_unreal_engine_path, is_plugin_installed, run_unreal_build
+from core.unreal_project import build_project_structure, enable_convai_plugin_in_uproject, extract_engine_version, get_unreal_engine_path, is_plugin_installed, is_supported_engine_version, run_unreal_build
 
 SERVER_URL = "http://localhost:5000/getprojectname"
 
@@ -23,11 +23,11 @@ def main():
     project_name = generate_project_name(asset_id)
     unreal_engine_path = get_unreal_engine_path()
 
-    engine_version = extract_engine_version(unreal_engine_path)
-    if not engine_version:
-        print("Unable to proceed without a valid Unreal Engine version.")
+    engine_version = extract_engine_version(unreal_engine_path)        
+    if not engine_version or not is_supported_engine_version(engine_version):
+        print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
         exit(1)
-
+    
     template_dir = os.path.join(unreal_engine_path, "Templates", "TP_Blank")
     project_dir = os.path.join(script_dir, project_name)
 

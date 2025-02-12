@@ -193,3 +193,18 @@ def enable_convai_plugin_in_uproject(uproject_path):
     except IOError:
         print("❌ Error: Unable to write to the .uproject file.")
         return False
+
+def is_supported_engine_version(engine_version):
+    """
+    Checks if the given engine version is supported.
+
+    Args:
+        engine_version (str): The extracted Unreal Engine version (e.g., '5.3').
+        supported_versions (list, optional): A list of supported versions (default: ['5.3']).
+
+    Returns:
+        bool: True if the version is supported, False otherwise.
+    """
+    supported_versions = ["5.3"]
+
+    return engine_version in supported_versions
