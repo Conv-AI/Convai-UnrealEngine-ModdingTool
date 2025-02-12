@@ -123,7 +123,6 @@ def extract_engine_version(installation_dir):
         print(f"Error reading Version.h: {e}")
         return None
 
-
 def get_unreal_engine_path():
     """Retrieve the Unreal Engine installation directory."""
     return sys.argv[1] if len(sys.argv) > 1 else input("Enter the Unreal Engine installation directory: ")
@@ -142,3 +141,55 @@ def is_plugin_installed(project_dir, plugin_name):
     plugin_path = os.path.join(project_dir, "Engine", "Plugins", "Marketplace", plugin_name)
     
     return os.path.isdir(plugin_path)
+
+def enable_convai_plugin_in_uproject(uproject_path):
+    """
+    Adds the ConvAI plugin entry to the Plugins array in the .uproject file if not already present.
+
+    Args:
+        uproject_path (str): The path to the .uproject file.
+
+    Returns:
+        bool: True if the plugin was added, False if it was already present or failed to update.
+    """
+    if not os.path.exists(uproject_path):
+        print(f"❌ .uproject file not found: {uproject_path}")
+        return False
+
+    try:
+        # Read the existing .uproject file
+        with open(uproject_path, "r", encoding="utf-8") as file:
+            uproject_data = json.load(file)
+
+        # Ensure the "Plugins" array exists
+        if "Plugins" not in uproject_data:
+            uproject_data["Plugins"] = []
+
+        # ConvAI Plugin entry
+        convai_plugin_entry = {
+            "Name": "ConvAI",
+            "Enabled": True,
+            "MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/696326c90d80462b8775712d2b6cc2a7"
+        }
+
+        # Check if ConvAI is already enabled
+        if any(plugin.get("Name") == "ConvAI" for plugin in uproject_data["Plugins"]):
+            #print("✅ ConvAI plugin is already enabled in the .uproject file.")
+            return False
+
+        # Add the plugin entry
+        uproject_data["Plugins"].append(convai_plugin_entry)
+
+        # Write back to the .uproject file
+        with open(uproject_path, "w", encoding="utf-8") as file:
+            json.dump(uproject_data, file, indent=4)
+
+        #print("✅ ConvAI plugin added to the .uproject file.")
+        return True
+
+    except json.JSONDecodeError:
+        print("❌ Error: Failed to parse .uproject JSON.")
+        return False
+    except IOError:
+        print("❌ Error: Unable to write to the .uproject file.")
+        return False
