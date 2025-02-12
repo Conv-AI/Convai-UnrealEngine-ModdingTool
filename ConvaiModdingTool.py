@@ -461,7 +461,11 @@ def extract_and_install_plugin(zip_path, plugins_dir):
 
 def main():
     """Main execution flow for setting up an Unreal Engine project."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if getattr(sys, 'frozen', False):  # Check if running as an exe
+        script_dir = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+
 
     asset_id = get_asset_id()
     if not asset_id:
@@ -484,15 +488,15 @@ def main():
     download_and_extract_plugin(project_dir)
     
     # Example usage inside another function
-    essentials_dir = os.path.join(project_dir, "ConvaiEssentials")
-    plugins_dir = os.path.join(project_dir, "Plugins")
+    #essentials_dir = os.path.join(project_dir, "ConvaiEssentials")
+    #plugins_dir = os.path.join(project_dir, "Plugins")
 
     # Download latest release from GitHub
-    zip_file_path = download_latest_github_release("Conv-AI/Convai-UnrealEngine-SDK", essentials_dir, "ConvaiSDK.zip")
+    #zip_file_path = download_latest_github_release("Conv-AI/Convai-UnrealEngine-SDK", essentials_dir, "ConvaiSDK.zip")
 
     # Extract and install if download was successful
-    if zip_file_path:
-        extract_and_install_plugin(zip_file_path, plugins_dir)
+    #if zip_file_path:
+    #    extract_and_install_plugin(zip_file_path, plugins_dir)
     
     run_unreal_build(unreal_engine_path, project_name, project_dir)
 
