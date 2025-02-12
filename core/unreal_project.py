@@ -127,3 +127,18 @@ def extract_engine_version(installation_dir):
 def get_unreal_engine_path():
     """Retrieve the Unreal Engine installation directory."""
     return sys.argv[1] if len(sys.argv) > 1 else input("Enter the Unreal Engine installation directory: ")
+
+def is_plugin_installed(project_dir, plugin_name):
+    """
+    Checks if a plugin is installed in the Unreal Engine project.
+
+    Args:
+        project_dir (str): The base project directory.
+        plugin_name (str): The name of the plugin.
+
+    Returns:
+        bool: True if the plugin exists, False otherwise.
+    """
+    plugin_path = os.path.join(project_dir, "Engine", "Plugins", "Marketplace", plugin_name)
+    
+    return os.path.isdir(plugin_path)
