@@ -194,6 +194,61 @@ def enable_convai_plugin_in_uproject(uproject_path):
         print("❌ Error: Unable to write to the .uproject file.")
         return False
 
+def enable_plugin_in_uproject(uproject_path, plugin_name, marketplace_url=""):
+    """
+    Adds a specified plugin entry to the Plugins array in the .uproject file if not already present.
+
+    Args:
+        uproject_path (str): The path to the .uproject file.
+        plugin_name (str): The name of the plugin to enable.
+        marketplace_url (str, optional): The Marketplace URL for the plugin (default: empty string).
+
+    Returns:
+        bool: True if the plugin was added, False if it was already present or failed to update.
+    """
+    if not os.path.exists(uproject_path):
+        print(f"❌ .uproject file not found: {uproject_path}")
+        return False
+
+    try:
+        # Read the existing .uproject file
+        with open(uproject_path, "r", encoding="utf-8") as file:
+            uproject_data = json.load(file)
+
+        # Ensure the "Plugins" array exists
+        if "Plugins" not in uproject_data:
+            uproject_data["Plugins"] = []
+
+        # Plugin entry
+        plugin_entry = {
+            "Name": plugin_name,
+            "Enabled": True,
+        }
+
+        if marketplace_url:
+            plugin_entry["MarketplaceURL"] = marketplace_url
+
+        # Check if the plugin is already enabled
+        if any(plugin.get("Name") == plugin_name for plugin in uproject_data["Plugins"]):
+            return False  # Plugin already enabled
+
+        # Add the plugin entry
+        uproject_data["Plugins"].append(plugin_entry)
+
+        # Write back to the .uproject file
+        with open(uproject_path, "w", encoding="utf-8") as file:
+            json.dump(uproject_data, file, indent=4)
+
+        return True
+
+    except json.JSONDecodeError:
+        print("❌ Error: Failed to parse .uproject JSON.")
+        return False
+    except IOError:
+        print("❌ Error: Unable to write to the .uproject file.")
+        return False
+
+
 def is_supported_engine_version(engine_version):
     """
     Checks if the given engine version is supported.

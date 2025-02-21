@@ -3,7 +3,7 @@ import sys
 
 from core.asset_manager import generate_project_name, get_asset_id, save_asset_metadata
 from core.download_utils import download_and_extract_plugin
-from core.unreal_project import build_project_structure, enable_convai_plugin_in_uproject, extract_engine_version, get_unreal_engine_path, is_plugin_installed, is_supported_engine_version, run_unreal_build
+from core.unreal_project import build_project_structure, enable_convai_plugin_in_uproject, enable_plugin_in_uproject, extract_engine_version, get_unreal_engine_path, is_plugin_installed, is_supported_engine_version, run_unreal_build
 
 SERVER_URL = "http://localhost:5000/getprojectname"
 
@@ -30,18 +30,20 @@ def main():
     
     template_dir = os.path.join(unreal_engine_path, "Templates", "TP_Blank")
     project_dir = os.path.join(script_dir, project_name)
+    uproject_file = os.path.join(project_dir, f"{project_name}.uproject")
 
     build_project_structure(project_name, template_dir, project_dir, unreal_engine_path, engine_version)    
     save_asset_metadata(project_dir, asset_id)    
     download_and_extract_plugin(project_dir)    
-    run_unreal_build(unreal_engine_path, project_name, project_dir)
-
+    enable_plugin_in_uproject(uproject_file, "JsonBlueprintUtilities")
+    
     if not is_plugin_installed(unreal_engine_path, "Convai"):
         print("❌ Convai plugin is not installed. Install it from the marketplace.")
     else:
-        uproject_file = os.path.join(project_dir, f"{project_name}.uproject")
         enable_convai_plugin_in_uproject(uproject_file)
-        
+    
+    run_unreal_build(unreal_engine_path, project_name, project_dir)
+    
     input("Press Enter to exit...")  
 
 if __name__ == "__main__":
