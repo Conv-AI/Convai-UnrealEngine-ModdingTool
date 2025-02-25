@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import sys
 
 from core.asset_manager import generate_project_name, get_asset_id, save_asset_metadata
@@ -28,20 +29,20 @@ def main():
         exit(1)
     
     template_dir = os.path.join(unreal_engine_path, "Templates", "TP_Blank")
-    project_dir = os.path.join(script_dir, project_name)
+    project_dir = os.path.join(Path(script_dir).parent, project_name)
     uproject_file = os.path.join(project_dir, f"{project_name}.uproject")
 
     build_project_structure(project_name, template_dir, project_dir, unreal_engine_path, engine_version)    
     save_asset_metadata(project_dir, asset_id)    
     download_and_extract_plugin(project_dir)    
     enable_plugin_in_uproject(uproject_file, "JsonBlueprintUtilities")
+        
+    run_unreal_build(unreal_engine_path, project_name, project_dir)
     
     if not is_plugin_installed(unreal_engine_path, "Convai"):
         print("❌ Convai plugin is not installed. Install it from the marketplace.")
     else:
         enable_convai_plugin_in_uproject(uproject_file)
-    
-    run_unreal_build(unreal_engine_path, project_name, project_dir)
     
     input("Press Enter to exit...")  
 
