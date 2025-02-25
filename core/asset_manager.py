@@ -3,25 +3,13 @@ import base64
 import hashlib
 import json
 import os
-import requests
+import uuid
 
-def get_asset_id(URL):
+def get_asset_id():
     """
-    Fetch the asset ID from the server.
+    Fetch unique string
     """
-    try:
-        response = requests.get(URL)
-        response.raise_for_status()
-        asset_id = response.json().get("project_name")  # The original response field
-
-        if not asset_id:
-            raise ValueError("Invalid response from server: No project_name field found.")
-
-        return asset_id
-
-    except requests.RequestException as e:
-        print(f"Error fetching asset ID: {e}")
-        return None
+    return str(uuid.uuid4())
 
 def generate_project_name(asset_id):
     """

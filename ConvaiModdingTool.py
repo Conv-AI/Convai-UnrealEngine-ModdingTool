@@ -5,7 +5,6 @@ from core.asset_manager import generate_project_name, get_asset_id, save_asset_m
 from core.download_utils import download_and_extract_plugin
 from core.unreal_project import build_project_structure, enable_convai_plugin_in_uproject, enable_plugin_in_uproject, extract_engine_version, get_unreal_engine_path, is_plugin_installed, is_supported_engine_version, run_unreal_build
 
-SERVER_URL = "http://localhost:5000/getprojectname"
 
 def main():
     """Main execution flow for setting up an Unreal Engine project."""
@@ -15,7 +14,7 @@ def main():
     else:
         script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    asset_id = get_asset_id(SERVER_URL)
+    asset_id = get_asset_id()
     if not asset_id:
         print("Failed to fetch asset ID. Exiting.")
         exit(1)
