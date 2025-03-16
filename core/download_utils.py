@@ -60,9 +60,50 @@ def unzip_file(zip_path, destination_path):
     except zipfile.BadZipFile:
         print("Error: The downloaded file is not a valid ZIP archive.")
 
+def download_plugins_from_gdrive_folder(folder_id, project_dir):
+    
+    if not importlib.util.find_spec("gdown"):
+        install_gdown()
+        importlib.reload(importlib)
 
+    import gdown
+    
+    download_dir = os.path.join(project_dir, "ConvaiEssentials")
+    os.makedirs(download_dir, exist_ok=True)
+    if not importlib.util.find_spec("gdown"):
+        install_gdown()
+        importlib.reload(importlib)
+    import gdown
+    url = f"https://drive.google.com/drive/folders/{folder_id}"
+    gdown.download_folder(url, output=download_dir, use_cookies=False, quiet=False)
+    
+    for f in os.listdir(download_dir):
+        file_path = os.path.join(download_dir, f)
+        if os.path.isfile(file_path) and f.lower().endswith(".zip"):
+            extract_plugin_zip(file_path, project_dir)
 
-
+def extract_plugin_zip(zip_path, project_dir):
+    plugins_dir = os.path.join(project_dir, "Plugins")
+    os.makedirs(plugins_dir, exist_ok=True)
+    temp_dir = os.path.join(plugins_dir, "Temp_Extract_Plugin")
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    os.makedirs(temp_dir, exist_ok=True)
+    unzip_file(zip_path, temp_dir)
+    plugin_folder = None
+    for root, _, files in os.walk(temp_dir):
+        if any(f.endswith(".uplugin") for f in files):
+            plugin_folder = root
+            break
+    if not plugin_folder:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        return None
+    final_plugin_path = os.path.join(plugins_dir, os.path.basename(plugin_folder))
+    if os.path.exists(final_plugin_path):
+        shutil.rmtree(final_plugin_path, ignore_errors=True)
+    shutil.move(plugin_folder, final_plugin_path)
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    return final_plugin_path
 
 def download_and_extract_plugin(project_dir):
     """Download and extract ConvaiPakManager plugin into ProjectDir/Plugins/."""
@@ -74,7 +115,6 @@ def download_and_extract_plugin(project_dir):
     if downloaded_file:
         unzip_destination = os.path.join(project_dir, "Plugins", "ConvaiPakManager")
         unzip_file(downloaded_file, unzip_destination)
-
 
 def download_latest_github_release(github_repo, download_dir, filename, max_retries=3):
     """
@@ -131,7 +171,6 @@ def download_latest_github_release(github_repo, download_dir, filename, max_retr
 
     print("Download failed after multiple attempts.")
     return None
-
 
 def extract_and_install_plugin(zip_path, plugins_dir):
     """
