@@ -26,12 +26,32 @@ def trim_unique_str(asset_id):
 
     return project_name
 
+def save_metadata(project_dir, field_name, field_value):
+    """
+    Save or update a key-value pair in ModdingMetaData.txt inside ProjectDir/ConvaiEssentials/.
 
-def save_asset_metadata(project_dir, asset_id):
-    """Save the asset ID to PakMetaData.txt inside ProjectDir/ConvaiEssentials/."""
+    Args:
+        project_dir (str): Path to the Unreal project directory.
+        field_name (str): Key to add or update in the metadata file.
+        field_value (Any): Value to assign to the key.
+    """
     metadata_dir = os.path.join(project_dir, "ConvaiEssentials")
     os.makedirs(metadata_dir, exist_ok=True)
 
-    metadata_file = os.path.join(metadata_dir, "PakMetaData.txt")
+    metadata_file = os.path.join(metadata_dir, "ModdingMetaData.txt")
+
+    # Load existing metadata if the file exists
+    metadata = {}
+    if os.path.exists(metadata_file):
+        try:
+            with open(metadata_file, "r", encoding="utf-8") as file:
+                metadata = json.load(file)
+        except (json.JSONDecodeError, IOError):
+            print("Warning: Existing ModdingMetaData.txt is corrupted or unreadable. Overwriting.")
+
+    # Update/add the field
+    metadata[field_name] = field_value
+
+    # Save the updated metadata
     with open(metadata_file, "w", encoding="utf-8") as file:
-        json.dump({"asset_id": asset_id}, file, indent=4)
+        json.dump(metadata, file, indent=4)

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import sys
 
-from core.asset_manager import trim_unique_str, get_unique_str
+from core.asset_manager import save_metadata, trim_unique_str, get_unique_str
 from core.download_utils import download_plugins_from_gdrive_folder
 from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugin_in_uproject, extract_engine_version, get_unreal_engine_path, is_supported_engine_version, run_unreal_build
 
@@ -37,6 +37,9 @@ def main():
         enable_plugin_in_uproject(uproject_file, It)
     
     run_unreal_build(unreal_engine_path, project_name, project_dir)
+    
+    save_metadata(project_dir, "project_name", project_name)
+    save_metadata(project_dir, "plugin_name", plugin_name)
     
     input("Press Enter to exit...")  
 
