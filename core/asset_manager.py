@@ -5,13 +5,13 @@ import json
 import os
 import uuid
 
-def get_asset_id():
+def get_unique_str():
     """
     Fetch unique string
     """
     return str(uuid.uuid4())
 
-def generate_project_name(asset_id):
+def trim_unique_str(asset_id):
     """
     Generate a 20-character Unreal Engine-compatible project name from the asset ID.
     Ensures that the name starts with a letter (A-Z).
