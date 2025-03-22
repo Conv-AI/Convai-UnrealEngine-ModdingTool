@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from core.file_utils import update_directory_structure
 
@@ -24,7 +25,6 @@ def set_engine_version(uproject_file, engine_version):
 
     except (json.JSONDecodeError, IOError) as e:
         print(f"Error updating EngineAssociation in .uproject file: {e}")
-
 
 def run_unreal_build(ue_directory, project_name, project_dir):
     """
@@ -55,7 +55,6 @@ def run_unreal_build(ue_directory, project_name, project_dir):
         print("Error: Unreal Compilation failed.")
     else:
         print("Unreal Compilation completed successfully!")
-
 
 def build_project_structure(project_name, template_dir, project_dir, ue_path, engine_version):
     """
@@ -248,7 +247,6 @@ def enable_plugin_in_uproject(uproject_path, plugin_name, marketplace_url=""):
         print("❌ Error: Unable to write to the .uproject file.")
         return False
 
-
 def is_supported_engine_version(engine_version):
     """
     Checks if the given engine version is supported.
@@ -263,3 +261,36 @@ def is_supported_engine_version(engine_version):
     supported_versions = ["5.3"]
 
     return engine_version in supported_versions
+
+def create_content_only_plugin(project_dir: str, plugin_name: str):
+    plugin_dir = Path(project_dir) / "Plugins" / plugin_name
+    content_dir = plugin_dir / "Content"
+    uplugin_path = plugin_dir / f"{plugin_name}.uplugin"
+
+    # Create plugin and content directories
+    os.makedirs(content_dir, exist_ok=True)
+
+    # Define the .uplugin file content
+    uplugin_data = {
+        "FileVersion": 3,
+        "Version": 1,
+        "VersionName": "1.0",
+        "FriendlyName": plugin_name,
+        "Description": f"{plugin_name} content-only plugin.",
+        "Category": "Other",
+        "CreatedBy": "Convai modding tool",
+        "CreatedByURL": "",
+        "DocsURL": "",
+        "MarketplaceURL": "",
+        "SupportURL": "",
+        "CanContainContent": True,
+        "IsBetaVersion": False,
+        "IsExperimentalVersion": False,
+        "Installed": False,
+    }
+
+    # Save the .uplugin file
+    with open(uplugin_path, "w") as f:
+        json.dump(uplugin_data, f, indent=4)
+   
+    
