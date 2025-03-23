@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 
 from core.asset_manager import save_metadata, trim_unique_str, get_unique_str
-from core.download_utils import download_plugins_from_gdrive_folder
+from core.download_utils import download_from_gdrive, download_modding_dependencies, download_plugins_from_gdrive_folder, unzip_file
 from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugin_in_uproject, extract_engine_version, get_unreal_engine_path, is_supported_engine_version, run_unreal_build
 
 
@@ -24,17 +24,15 @@ def main():
         print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
         exit(1)
     
-    template_dir = os.path.join(unreal_engine_path, "Templates", "TP_Blank")
     project_dir = os.path.join(Path(script_dir).parent, project_name)
-    uproject_file = os.path.join(project_dir, f"{project_name}.uproject")
     
-    build_project_structure(project_name, template_dir, project_dir, unreal_engine_path, engine_version)
+    build_project_structure(project_name, project_dir, unreal_engine_path, engine_version)
     create_content_only_plugin(project_dir, plugin_name)
-    download_plugins_from_gdrive_folder("11n7EZW4SBd4Ri9Q6GuXFdoLrwCZvnnwq", project_dir)
+    download_modding_dependencies(project_dir)
     
     PluginName = ["ConvAI", "ConvaiHTTP", "ConvaiPakManager", "JsonBlueprintUtilities", plugin_name]
     for It in PluginName:
-        enable_plugin_in_uproject(uproject_file, It)
+        enable_plugin_in_uproject(os.path.join(project_dir, f"{project_name}.uproject"), It)
     
     run_unreal_build(unreal_engine_path, project_name, project_dir)
     

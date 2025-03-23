@@ -231,3 +231,10 @@ def extract_and_install_plugin(zip_path, plugins_dir):
         print("Error: The downloaded file is not a valid ZIP archive.")
         return None
 
+def download_modding_dependencies(project_dir):
+    #CC pak
+    download_from_gdrive("1y2lkBFo7ebRFt8SIiV9ME1mmRwgpnM3h", os.path.join(project_dir, "ConvaiEssentials"), "ConvaiConveniencePack.zip")
+    unzip_file(os.path.join(project_dir, "ConvaiEssentials", "ConvaiConveniencePack.zip"), os.path.join(project_dir, "Content"))
+    
+    #Necessary plugins
+    download_plugins_from_gdrive_folder("11n7EZW4SBd4Ri9Q6GuXFdoLrwCZvnnwq", project_dir)

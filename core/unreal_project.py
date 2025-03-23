@@ -56,7 +56,7 @@ def run_unreal_build(ue_directory, project_name, project_dir):
     else:
         print("Unreal Compilation completed successfully!")
 
-def build_project_structure(project_name, template_dir, project_dir, ue_path, engine_version):
+def build_project_structure(project_name, project_dir, ue_path, engine_version):
     """
     Create a new Unreal Engine project from a template.
     """
@@ -64,6 +64,8 @@ def build_project_structure(project_name, template_dir, project_dir, ue_path, en
         print(f"Error: Project directory already exists: {project_dir}")
         return
 
+    template_dir = os.path.join(ue_path, "Templates", "TP_Blank")
+    
     # Copy template
     shutil.copytree(template_dir, project_dir)
 
