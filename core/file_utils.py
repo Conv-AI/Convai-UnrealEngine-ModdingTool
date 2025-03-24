@@ -108,14 +108,13 @@ def delete_directory_if_exists(directory_path):
         except Exception as e:
             print(f"Failed to delete {directory_path}: {e}")
 
-def remove_metahuman_if_scene(project_dir):
+def remove_metahuman_if_scene(project_dir, asset_type):
     """
     If user selects Scene, removes the MetaHuman folder from Convai plugin content.
 
     Args:
         unreal_engine_path (str): The path to the Unreal Engine installation.
     """
-    asset_type = get_asset_type_from_user()
     if asset_type == "Scene":
         metahuman_dir = os.path.join(project_dir, "Plugins", "Convai-UnrealEngine-SDK-Dev", "Content", "MetaHumans")
         delete_directory_if_exists(metahuman_dir)
