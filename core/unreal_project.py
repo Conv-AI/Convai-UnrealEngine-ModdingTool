@@ -96,7 +96,6 @@ def build_project_structure(project_name, project_dir, ue_path, engine_version):
     print(f"Project '{project_name}' created successfully at {project_dir}")
     return True
 
-
 def extract_engine_version(installation_dir):
     """
     Parse the Version.h file to get the Unreal Engine version.
@@ -142,7 +141,7 @@ def get_unreal_engine_path():
     """Retrieve the Unreal Engine installation directory."""
     return sys.argv[1] if len(sys.argv) > 1 else input("Enter the Unreal Engine installation directory: ")
 
-def is_plugin_installed(project_dir, plugin_name):
+def is_plugin_installed(ue_dir, plugin_name):
     """
     Checks if a plugin is installed in the Unreal Engine project.
 
@@ -153,61 +152,9 @@ def is_plugin_installed(project_dir, plugin_name):
     Returns:
         bool: True if the plugin exists, False otherwise.
     """
-    plugin_path = os.path.join(project_dir, "Engine", "Plugins", "Marketplace", plugin_name)
+    plugin_path = os.path.join(ue_dir, "Engine", "Plugins", "Marketplace", plugin_name)
     
     return os.path.isdir(plugin_path)
-
-def enable_convai_plugin_in_uproject(uproject_path):
-    """
-    Adds the ConvAI plugin entry to the Plugins array in the .uproject file if not already present.
-
-    Args:
-        uproject_path (str): The path to the .uproject file.
-
-    Returns:
-        bool: True if the plugin was added, False if it was already present or failed to update.
-    """
-    if not os.path.exists(uproject_path):
-        print(f"❌ .uproject file not found: {uproject_path}")
-        return False
-
-    try:
-        # Read the existing .uproject file
-        with open(uproject_path, "r", encoding="utf-8") as file:
-            uproject_data = json.load(file)
-
-        # Ensure the "Plugins" array exists
-        if "Plugins" not in uproject_data:
-            uproject_data["Plugins"] = []
-
-        # ConvAI Plugin entry
-        convai_plugin_entry = {
-            "Name": "ConvAI",
-            "Enabled": True,
-            "MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/696326c90d80462b8775712d2b6cc2a7"
-        }
-
-        # Check if ConvAI is already enabled
-        if any(plugin.get("Name") == "ConvAI" for plugin in uproject_data["Plugins"]):
-            #print("✅ ConvAI plugin is already enabled in the .uproject file.")
-            return False
-
-        # Add the plugin entry
-        uproject_data["Plugins"].append(convai_plugin_entry)
-
-        # Write back to the .uproject file
-        with open(uproject_path, "w", encoding="utf-8") as file:
-            json.dump(uproject_data, file, indent=4)
-
-        #print("✅ ConvAI plugin added to the .uproject file.")
-        return True
-
-    except json.JSONDecodeError:
-        print("❌ Error: Failed to parse .uproject JSON.")
-        return False
-    except IOError:
-        print("❌ Error: Unable to write to the .uproject file.")
-        return False
 
 def enable_plugin_in_uproject(uproject_path, plugin_name, marketplace_url=""):
     """
@@ -263,6 +210,10 @@ def enable_plugin_in_uproject(uproject_path, plugin_name, marketplace_url=""):
         print("❌ Error: Unable to write to the .uproject file.")
         return False
 
+def enable_plugins_in_uproject(project_dir, project_name, PluginNames):
+    for It in PluginNames:
+        enable_plugin_in_uproject(os.path.join(project_dir, f"{project_name}.uproject"), It)
+
 def is_supported_engine_version(engine_version):
     """
     Checks if the given engine version is supported.
@@ -312,3 +263,74 @@ def create_content_only_plugin(project_dir: str, plugin_name: str):
 def get_project_name():
     """Retrieve the project name from command line arguments or by prompting the user."""
     return sys.argv[2] if len(sys.argv) > 2 else input("Enter the Project Name: ")
+
+def is_version_greater(v1, v2):
+    """
+    Compare two semantic version strings (e.g., "3.6.1" and "3.5.2").
+    Returns True if v1 is greater than v2, else False.
+    """
+    def parse_version(v):
+        return [int(part) for part in v.split('.')]
+    
+    v1_parts = parse_version(v1)
+    v2_parts = parse_version(v2)
+    
+    # Pad the shorter version with zeros (e.g., "3.6" becomes [3,6,0])
+    max_length = max(len(v1_parts), len(v2_parts))
+    v1_parts.extend([0] * (max_length - len(v1_parts)))
+    v2_parts.extend([0] * (max_length - len(v2_parts)))
+    
+    return v1_parts > v2_parts
+
+def verify_convai_plugin(ue_dir):
+    """
+    Verifies if the Convai plugin is installed and its version is greater than 3.5.2.
+    
+    Args:
+        ue_dir (str): The Unreal Engine installation directory.
+        
+    Returns:
+        bool: True if the Convai plugin is installed and its version is greater than 3.5.2,
+              False otherwise.
+    """
+    plugin_name = "Convai"
+    
+    # Use the existing function to check if the plugin is installed.
+    if not is_plugin_installed(ue_dir, plugin_name):
+        print("❌ Convai plugin is not installed.")
+        return False
+    
+    # Construct the path to the Convai plugin directory.
+    plugin_path = os.path.join(ue_dir, "Engine", "Plugins", "Marketplace", plugin_name)
+    
+    # Search for the .uplugin file in the plugin directory.
+    uplugin_file = None
+    for filename in os.listdir(plugin_path):
+        if filename.endswith(".uplugin"):
+            uplugin_file = os.path.join(plugin_path, filename)
+            break
+    
+    if not uplugin_file or not os.path.exists(uplugin_file):
+        print("❌ Error: .uplugin file not found for Convai plugin.")
+        return False
+    
+    # Load and parse the .uplugin file.
+    try:
+        with open(uplugin_file, "r", encoding="utf-8") as f:
+            plugin_data = json.load(f)
+    except Exception as e:
+        print("❌ Error reading .uplugin file:", e)
+        return False
+    
+    version_name = plugin_data.get("VersionName", "")
+    if not version_name:
+        print("❌ Error: VersionName not found in the .uplugin file.")
+        return False
+    
+    # Check if the version is greater than "3.5.2"
+    if is_version_greater(version_name, "3.5.1"):
+        print(f"Verification successful: Convai plugin version is {version_name}.")
+        return True
+    else:
+        print(f"❌ Error: You need to update the Convai plugin. Current version: {version_name}.")
+        return False
