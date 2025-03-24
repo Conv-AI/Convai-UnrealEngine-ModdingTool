@@ -55,3 +55,22 @@ def save_metadata(project_dir, field_name, field_value):
     # Save the updated metadata
     with open(metadata_file, "w", encoding="utf-8") as file:
         json.dump(metadata, file, indent=4)
+
+def get_asset_type_from_user():
+    """
+    Prompts the user to choose between Scene (1) or Avatar (2).
+
+    Returns:
+        str: 'Scene' or 'Avatar'
+    """
+    while True:
+        print("Select the type of asset you want to create:")
+        print("1. Scene")
+        print("2. Avatar")
+        choice = input("Enter your choice (1 or 2): ").strip()
+        if choice == "1":
+            return "Scene"
+        elif choice == "2":
+            return "Avatar"
+        else:
+            print("Invalid input. Please enter 1 or 2.")

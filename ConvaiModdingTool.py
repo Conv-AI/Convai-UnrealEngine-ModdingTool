@@ -4,6 +4,7 @@ import sys
 
 from core.asset_manager import save_metadata, trim_unique_str, get_unique_str
 from core.download_utils import download_modding_dependencies
+from core.file_utils import remove_metahuman_if_scene
 from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, update_default_game_ini, verify_convai_plugin
 
 def main():
@@ -38,6 +39,8 @@ def main():
     
     save_metadata(project_dir, "project_name", project_name)
     save_metadata(project_dir, "plugin_name", plugin_name)
+    
+    remove_metahuman_if_scene(project_dir)
     
     run_unreal_build(unreal_engine_path, project_name, project_dir)
     input("Press Enter to exit...")
