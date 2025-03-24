@@ -1,6 +1,8 @@
 import os
 import re
-import sys
+import shutil
+
+from core.asset_manager import get_asset_type_from_user
 
 def update_file_content(file_path, old_value, new_value):
     """
@@ -94,3 +96,26 @@ def case_preserving_replace(old_value, new_value, text):
 
     pattern = re.compile(re.escape(old_value), re.IGNORECASE)
     return pattern.sub(replace_with_matching_case, text)
+
+def delete_directory_if_exists(directory_path):
+    """
+    Deletes the specified directory if it exists.
+    """
+    if os.path.exists(directory_path) and os.path.isdir(directory_path):
+        try:
+            shutil.rmtree(directory_path)
+            print(f"Deleted directory: {directory_path}")
+        except Exception as e:
+            print(f"Failed to delete {directory_path}: {e}")
+
+def remove_metahuman_if_scene(project_dir):
+    """
+    If user selects Scene, removes the MetaHuman folder from Convai plugin content.
+
+    Args:
+        unreal_engine_path (str): The path to the Unreal Engine installation.
+    """
+    asset_type = get_asset_type_from_user()
+    if asset_type == "Scene":
+        metahuman_dir = os.path.join(project_dir, "Plugins", "Convai-UnrealEngine-SDK-Dev", "Content", "MetaHumans")
+        delete_directory_if_exists(metahuman_dir)
