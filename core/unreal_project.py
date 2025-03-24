@@ -4,6 +4,8 @@ import re
 import shutil
 import subprocess
 import sys
+import time
+import webbrowser
 from pathlib import Path
 
 from core.file_utils import update_directory_structure
@@ -285,6 +287,7 @@ def is_version_greater(v1, v2):
 def verify_convai_plugin(ue_dir):
     """
     Verifies if the Convai plugin is installed and its version is greater than 3.5.2.
+    If verification fails, it prompts the user to update the plugin using prompt_update_convai_plugin.
     
     Args:
         ue_dir (str): The Unreal Engine installation directory.
@@ -294,10 +297,11 @@ def verify_convai_plugin(ue_dir):
               False otherwise.
     """
     plugin_name = "Convai"
+    update_url = "https://www.fab.com/listings/ba3145af-d2ef-434a-8bc3-f3fa1dfe7d5c"
     
-    # Use the existing function to check if the plugin is installed.
+    # Check if the plugin is installed.
     if not is_plugin_installed(ue_dir, plugin_name):
-        print("❌ Convai plugin is not installed.")
+        prompt_update_convai_plugin(update_url, "Convai plugin is not installed.")
         return False
     
     # Construct the path to the Convai plugin directory.
@@ -311,7 +315,7 @@ def verify_convai_plugin(ue_dir):
             break
     
     if not uplugin_file or not os.path.exists(uplugin_file):
-        print("❌ Error: .uplugin file not found for Convai plugin.")
+        prompt_update_convai_plugin(update_url, "Error: .uplugin file not found for Convai plugin.")
         return False
     
     # Load and parse the .uplugin file.
@@ -319,18 +323,31 @@ def verify_convai_plugin(ue_dir):
         with open(uplugin_file, "r", encoding="utf-8") as f:
             plugin_data = json.load(f)
     except Exception as e:
-        print("❌ Error reading .uplugin file:", e)
+        prompt_update_convai_plugin(update_url, f"Error reading .uplugin file: {e}")
         return False
     
     version_name = plugin_data.get("VersionName", "")
     if not version_name:
-        print("❌ Error: VersionName not found in the .uplugin file.")
+        prompt_update_convai_plugin(update_url, "Error: VersionName not found in the .uplugin file.")
         return False
     
-    # Check if the version is greater than "3.5.2"
     if is_version_greater(version_name, "3.5.1"):
         print(f"Verification successful: Convai plugin version is {version_name}.")
         return True
     else:
-        print(f"❌ Error: You need to update the Convai plugin. Current version: {version_name}.")
+        prompt_update_convai_plugin(update_url, f"Error: You need to update the Convai plugin. Current version: {version_name}.")
         return False
+
+def prompt_update_convai_plugin(update_url, error_message):
+    """
+    Prompts the user to update the Convai plugin by printing an error message,
+    waiting 2 seconds, and opening the update URL in the default web browser.
+    
+    Args:
+        update_url (str): The URL to open for updating the plugin.
+        error_message (str): The error message to display.
+    """
+    print(error_message)
+    print("Please update the Convai plugin. Opening update link in your browser shortly...")
+    time.sleep(2)
+    webbrowser.open(update_url)

@@ -4,7 +4,7 @@ import sys
 
 from core.asset_manager import save_metadata, trim_unique_str, get_unique_str
 from core.download_utils import download_modding_dependencies
-from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugin_in_uproject, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, verify_convai_plugin
+from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugin_in_uproject, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, prompt_update_convai_plugin, run_unreal_build, verify_convai_plugin
 
 def main():
     """Main execution flow for setting up an Unreal Engine project."""
@@ -42,7 +42,7 @@ def main():
     save_metadata(project_dir, "project_name", project_name)
     save_metadata(project_dir, "plugin_name", plugin_name)
     
-    input("Press Enter to exit...")  
+    input("Press Enter to exit...")
 
 if __name__ == "__main__":
     main()
