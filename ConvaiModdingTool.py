@@ -14,10 +14,7 @@ def main():
     else:
         script_dir = os.path.dirname(os.path.abspath(__file__))
    
-    unreal_engine_path = get_unreal_engine_path()    
-    if not verify_convai_plugin(unreal_engine_path) :
-        exit(1)
-    
+    unreal_engine_path = get_unreal_engine_path()        
     engine_version = extract_engine_version(unreal_engine_path)        
     if not engine_version or not is_supported_engine_version(engine_version):
         print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
