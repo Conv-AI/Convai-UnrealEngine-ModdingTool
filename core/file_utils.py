@@ -94,9 +94,3 @@ def case_preserving_replace(old_value, new_value, text):
 
     pattern = re.compile(re.escape(old_value), re.IGNORECASE)
     return pattern.sub(replace_with_matching_case, text)
-
-def get_script_dir():
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(os.path.abspath(sys.executable))
-    else:
-        return os.path.dirname(os.path.abspath(__file__))
