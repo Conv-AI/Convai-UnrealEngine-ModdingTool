@@ -1,7 +1,6 @@
-
 import os
 import re
-
+import sys
 
 def update_file_content(file_path, old_value, new_value):
     """
@@ -23,7 +22,6 @@ def update_file_content(file_path, old_value, new_value):
         except IOError:
             print(f"Error writing to file: {file_path}")
 
-
 def rename_file(file_path, old_value, new_value):
     """
     Rename the file if old_value is part of the file name, preserving case.
@@ -37,7 +35,6 @@ def rename_file(file_path, old_value, new_value):
             #print(f"Renamed file: {file_path} -> {new_file_path}")
         #else:
             #print(f"File already exists: {new_file_path}")
-
 
 def rename_directory(directory, old_value, new_value):
     """
@@ -65,7 +62,6 @@ def is_text_file(file_path):
     """
     text_extensions = {".cpp", ".h", ".cs", ".ini", ".uproject"}
     return os.path.splitext(file_path)[1].lower() in text_extensions
-
 
 def update_directory_structure(directory, old_value, new_value):
     """
@@ -99,3 +95,8 @@ def case_preserving_replace(old_value, new_value, text):
     pattern = re.compile(re.escape(old_value), re.IGNORECASE)
     return pattern.sub(replace_with_matching_case, text)
 
+def get_script_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
