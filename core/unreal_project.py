@@ -59,10 +59,22 @@ def run_unreal_build(ue_directory, project_name, project_dir):
 def build_project_structure(project_name, project_dir, ue_path, engine_version):
     """
     Create a new Unreal Engine project from a template.
+    Performs validation on the project name:
+    - The project name must not exceed 20 characters.
+    - The project directory must not already exist.
+    
+    Returns:
+        bool: True if the project structure was built successfully, False otherwise.
     """
+    # Validate project name length
+    if len(project_name) > 20:
+        print("Error: Project name is invalid. It should not exceed 20 characters.")
+        return False
+
+    # Validate that the project directory does not already exist
     if os.path.exists(project_dir):
         print(f"Error: Project directory already exists: {project_dir}")
-        return
+        return False
 
     template_dir = os.path.join(ue_path, "Templates", "TP_Blank")
     
@@ -74,7 +86,7 @@ def build_project_structure(project_name, project_dir, ue_path, engine_version):
     if not os.path.exists(content_dir):
         os.makedirs(content_dir)
 
-    # Replace all occurrences of template name in the project
+    # Replace all occurrences of the template name in the project
     update_directory_structure(project_dir, "TP_Blank", project_name)
 
     # Update the .uproject file with the correct engine version
@@ -82,6 +94,8 @@ def build_project_structure(project_name, project_dir, ue_path, engine_version):
     set_engine_version(uproject_file, engine_version)
 
     print(f"Project '{project_name}' created successfully at {project_dir}")
+    return True
+
 
 def extract_engine_version(installation_dir):
     """
@@ -295,4 +309,6 @@ def create_content_only_plugin(project_dir: str, plugin_name: str):
     with open(uplugin_path, "w") as f:
         json.dump(uplugin_data, f, indent=4)
    
-    
+def get_project_name():
+    """Retrieve the project name from command line arguments or by prompting the user."""
+    return sys.argv[2] if len(sys.argv) > 2 else input("Enter the Project Name: ")
