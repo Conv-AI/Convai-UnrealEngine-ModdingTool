@@ -351,3 +351,51 @@ def prompt_update_convai_plugin(update_url, error_message):
     print("Please update the Convai plugin. Opening update link in your browser shortly...")
     time.sleep(2)
     webbrowser.open(update_url)
+    
+def update_default_game_ini(project_dir, plugin_name):
+    """
+    Updates the DefaultGame.ini file in the project's Config directory with the required settings.
+    
+    This function writes hardcoded settings to DefaultGame.ini. It replaces the <PluginName> placeholder
+    with the provided plugin_name.
+    
+    Args:
+        project_dir (str): The path to your Unreal project directory.
+        plugin_name (str): The name of the content-only plugin.
+    """
+    # Ensure the Config directory exists
+    config_dir = os.path.join(project_dir, "Config")
+    os.makedirs(config_dir, exist_ok=True)
+    
+    # Path to the DefaultGame.ini file
+    default_game_ini_path = os.path.join(config_dir, "DefaultGame.ini")
+    
+    # Hardcoded INI content with <PluginName> placeholder
+    ini_content = r'''
+[/Script/UnrealEd.ProjectPackagingSettings]
+bUseIoStore=False
+bGenerateChunks=True
+bShareMaterialShaderCode=False
+UsePakFile=True
+
+[/Script/Engine.AssetManagerSettings]
+-PrimaryAssetTypesToScan=(PrimaryAssetType="Map",AssetBaseClass=/Script/Engine.World,bHasBlueprintClasses=False,bIsEditorOnly=True,Directories=((Path="/Game/Maps")),SpecificAssets=,Rules=(Priority=-1,ChunkId=-1,bApplyRecursively=True,CookRule=Unknown))
+-PrimaryAssetTypesToScan=(PrimaryAssetType="PrimaryAssetLabel",AssetBaseClass=/Script/Engine.PrimaryAssetLabel,bHasBlueprintClasses=False,bIsEditorOnly=True,Directories=((Path="/Game")),SpecificAssets=,Rules=(Priority=-1,ChunkId=-1,bApplyRecursively=True,CookRule=Unknown))
++PrimaryAssetTypesToScan=(PrimaryAssetType="Map",AssetBaseClass="/Script/Engine.World",bHasBlueprintClasses=False,bIsEditorOnly=True,Directories=((Path="/Game/Maps")),SpecificAssets=,Rules=(Priority=-1,ChunkId=-1,bApplyRecursively=True,CookRule=Unknown))
++PrimaryAssetTypesToScan=(PrimaryAssetType="PrimaryAssetLabel",AssetBaseClass="/Script/Engine.PrimaryAssetLabel",bHasBlueprintClasses=False,bIsEditorOnly=True,Directories=((Path="/Game"),(Path="/<PluginName>")),SpecificAssets=,Rules=(Priority=-1,ChunkId=-1,bApplyRecursively=True,CookRule=Unknown))
+bOnlyCookProductionAssets=False
+bShouldManagerDetermineTypeAndName=False
+bShouldGuessTypeAndNameInEditor=True
+bShouldAcquireMissingChunksOnLoad=False
+bShouldWarnAboutInvalidAssets=True
+MetaDataTagsForAssetRegistry=()
+    '''
+    # Replace <PluginName> with the actual plugin name
+    ini_content = ini_content.replace("<PluginName>", plugin_name)
+    
+    # Write the content to DefaultGame.ini
+    with open(default_game_ini_path, "w", encoding="utf-8") as file:
+        file.write(ini_content.strip() + "\n")
+    
+    print(f"DefaultGame.ini has been updated with plugin name: {plugin_name}")
+
