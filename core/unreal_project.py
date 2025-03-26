@@ -264,7 +264,8 @@ def create_content_only_plugin(project_dir: str, plugin_name: str):
    
 def get_project_name():
     """Retrieve the project name from command line arguments or by prompting the user."""
-    return sys.argv[2] if len(sys.argv) > 2 else input("Enter the Project Name: ")
+    #return sys.argv[2] if len(sys.argv) > 2 else input("Enter the Project Name: ")
+    return "ConvaiModdingTool"
 
 def is_version_greater(v1, v2):
     """
