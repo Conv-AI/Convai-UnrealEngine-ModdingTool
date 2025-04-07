@@ -141,7 +141,7 @@ def extract_engine_version(installation_dir):
 
 def get_unreal_engine_path():
     """Retrieve the Unreal Engine installation directory."""
-    return sys.argv[1] if len(sys.argv) > 1 else input("Enter the Unreal Engine installation directory: ")
+    return sys.argv[1] if len(sys.argv) > 1 else input("Enter the Unreal Engine 5.3 installation directory: ")
 
 def is_plugin_installed(ue_dir, plugin_name):
     """
