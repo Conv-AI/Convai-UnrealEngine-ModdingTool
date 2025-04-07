@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 import os
+import sys
 import uuid
 
 def get_unique_str():
@@ -74,3 +75,11 @@ def get_asset_type_from_user():
             return "Avatar"
         else:
             print("Invalid input. Please enter 1 or 2.")
+
+def get_api_key():
+    while True:
+        convai_api_key = input("Enter the Convai API key: ").strip()
+        if convai_api_key and convai_api_key.isalnum():
+            return convai_api_key
+        else:
+            print("Invalid API key. Please enter a valid alphanumeric key.")

@@ -400,3 +400,24 @@ MetaDataTagsForAssetRegistry=()
     
     print(f"DefaultGame.ini has been updated with plugin name: {plugin_name}")
 
+def update_default_engine_ini(project_dir, convai_api_key):
+    """
+    Appends the Convai API key to the DefaultEngine.ini file in the project's Config directory.
+
+    Args:
+        project_dir (str): The path to your Unreal project directory.
+        api_key (str): The Convai API key entered by the user.
+    """
+    config_dir = os.path.join(project_dir, "Config")
+    os.makedirs(config_dir, exist_ok=True)
+
+    default_engine_ini_path = os.path.join(config_dir, "DefaultEngine.ini")
+
+    # Lines to append
+    lines_to_add = f"""
+[/Script/Convai.ConvaiSettings]
+API_Key={convai_api_key}
+"""
+
+    with open(default_engine_ini_path, "a", encoding="utf-8") as file:
+        file.write(lines_to_add.strip() + "\n")
