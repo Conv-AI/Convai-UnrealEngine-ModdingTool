@@ -21,7 +21,7 @@ def main():
         print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
         exit(1)
     
-    project_name = get_project_name()
+    project_name = get_project_name(script_dir)
     convai_api_key = get_api_key()
     asset_type = get_asset_type_from_user()
     project_dir = os.path.join(script_dir, project_name)

@@ -262,10 +262,33 @@ def create_content_only_plugin(project_dir: str, plugin_name: str):
     with open(uplugin_path, "w") as f:
         json.dump(uplugin_data, f, indent=4)
    
-def get_project_name():
-    """Retrieve the project name from command line arguments or by prompting the user."""
-    #return sys.argv[2] if len(sys.argv) > 2 else input("Enter the Project Name: ")
-    return "ConvaiModdingTool"
+def is_valid_project_name(name: str, root_dir: Path):
+    return (
+        name and                      # name is not empty
+        not name[0].isdigit() and     # doesn't start with a digit
+        not (root_dir / name).exists()  # doesn't already exist
+    )
+
+def get_project_name(project_root_dir: str):
+    """
+    Prompt for or retrieve a valid project name that:
+    - Doesn't start with a number
+    - Doesn't already exist under the specified project root directory
+
+    Args:
+        project_root_dir (str or Path): Directory where the new project will be created.
+
+    Returns:
+        str: A validated project name.
+    """
+    root_dir = Path(project_root_dir)
+
+    while True:
+        name = input(f"Enter the Project Name: ").strip()
+        if is_valid_project_name(name, root_dir):
+            return name
+        else :
+            print("Enter a valid project name")
 
 def is_version_greater(v1, v2):
     """
@@ -418,6 +441,5 @@ def update_default_engine_ini(project_dir, convai_api_key):
 [/Script/Convai.ConvaiSettings]
 API_Key={convai_api_key}
 """
-
     with open(default_engine_ini_path, "a", encoding="utf-8") as file:
         file.write(lines_to_add.strip() + "\n")
