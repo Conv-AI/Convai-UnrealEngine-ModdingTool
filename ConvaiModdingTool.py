@@ -14,8 +14,8 @@ def main():
         script_dir = os.path.dirname(os.path.abspath(sys.executable))
     else:
         script_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
-        
-    unreal_engine_path = get_unreal_engine_path()        
+    
+    unreal_engine_path = get_unreal_engine_path(["E:/Software/UE_5.3", "D:/Software/UnrealEngine/UE_5.3/UE_5.3"])        
     engine_version = extract_engine_version(unreal_engine_path)        
     if not engine_version or not is_supported_engine_version(engine_version):
         print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")

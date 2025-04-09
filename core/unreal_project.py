@@ -113,19 +113,13 @@ def extract_engine_version(installation_dir):
         with open(version_file, 'r', encoding='utf-8') as file:
             lines = file.readlines()
             for line in lines:
-                # Debug: Print each line being read
-                # print(f"Parsing line: {line.strip()}")
-
                 major_match = re.search(r"^\s*#define\s+ENGINE_MAJOR_VERSION\s+(\d+)", line)
                 minor_match = re.search(r"^\s*#define\s+ENGINE_MINOR_VERSION\s+(\d+)", line)
-
                 if major_match:
                     version['major'] = major_match.group(1)
-                    #print(f"Found major version: {version['major']}")  # Debug
                 if minor_match:
                     version['minor'] = minor_match.group(1)
-                    #print(f"Found minor version: {version['minor']}")  # Debug
-
+                    
         if 'major' in version and 'minor' in version:
             return f"{version['major']}.{version['minor']}"
         else:
@@ -139,9 +133,45 @@ def extract_engine_version(installation_dir):
         print(f"Error reading Version.h: {e}")
         return None
 
-def get_unreal_engine_path():
-    """Retrieve the Unreal Engine installation directory."""
-    return sys.argv[1] if len(sys.argv) > 1 else input("Enter the Unreal Engine 5.3 installation directory: ")
+def is_valid_engine_path(ue_path: Path) -> bool:
+    if not ue_path.exists():
+        return False
+    
+    engine_version = extract_engine_version(ue_path)
+    if not engine_version or not is_supported_engine_version(engine_version):
+        return False
+    return True
+
+def get_unreal_engine_path(default_paths=None):
+    """
+    Retrieve and validate the Unreal Engine installation directory.
+
+    Args:
+        default_paths (str or list of str, optional): One or more default Unreal Engine paths to try.
+
+    Returns:
+        str: A valid Unreal Engine directory path.
+    """
+    if default_paths is None:
+        default_paths = []
+    elif isinstance(default_paths, str):
+        default_paths = [default_paths]
+
+    for default_path in default_paths:
+        path_obj = Path(default_path)
+        if is_valid_engine_path(path_obj):
+            response = input(f"Found valid Unreal Engine path: {path_obj}\nDo you want to use this path? (Y/N): ").strip().lower()
+            if response in ("", "y", "yes"):
+                return str(path_obj)
+
+    while True:
+        user_input = input("Enter the Unreal Engine 5.3 installation directory: ").strip()
+        engine_path = Path(user_input)
+        if is_valid_engine_path(engine_path):
+            print(f"Using Unreal Engine path: {engine_path}")
+            return str(engine_path)
+        else:
+            print("Invalid path Unreal Engine 5.3 path")
 
 def is_plugin_installed(ue_dir, plugin_name):
     """
