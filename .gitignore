@@ -37,3 +37,6 @@ Config/DefaultEditorUserSettings.ini
 # Ignore Custom Temporary Files
 temp/
 *.bak
+
+/dist
+*.spec

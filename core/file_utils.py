@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import re
 import shutil
 
@@ -115,6 +116,13 @@ def remove_metahuman_if_scene(project_dir, asset_type):
     Args:
         unreal_engine_path (str): The path to the Unreal Engine installation.
     """
-    if asset_type == "Scene":
-        metahuman_dir = os.path.join(project_dir, "Plugins", "Convai-UnrealEngine-SDK-Dev", "Content", "MetaHumans")
+    if asset_type != "Scene":
+        return
+
+    plugins_dir = Path(project_dir) / "Plugins"
+    
+    for plugin_path in plugins_dir.glob("*/ConvAI.uplugin"):
+        plugin_root = plugin_path.parent  
+        metahuman_dir = plugin_root / "Content" / "MetaHumans"
         delete_directory_if_exists(metahuman_dir)
+        break  

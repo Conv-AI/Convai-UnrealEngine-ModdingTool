@@ -13,7 +13,7 @@ def main():
     if getattr(sys, 'frozen', False):  # Check if running as an exe
         script_dir = os.path.dirname(os.path.abspath(sys.executable))
     else:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
         
     unreal_engine_path = get_unreal_engine_path()        
     engine_version = extract_engine_version(unreal_engine_path)        
@@ -24,8 +24,8 @@ def main():
     project_name = get_project_name()
     convai_api_key = get_api_key()
     asset_type = get_asset_type_from_user()
-    project_dir = os.path.join(Path(script_dir).parent, project_name)
-            
+    project_dir = os.path.join(script_dir, project_name)
+    
     # Build project structure and exit if validations fail
     if not build_project_structure(project_name, project_dir, unreal_engine_path, engine_version):
         print("Exiting execution due to invalid project name or existing project directory.")
@@ -33,7 +33,7 @@ def main():
     
     plugin_name = trim_unique_str(get_unique_str())
     create_content_only_plugin(project_dir, plugin_name)
-    
+        
     update_default_game_ini(project_dir, plugin_name)
     update_default_engine_ini(project_dir, convai_api_key)
     
