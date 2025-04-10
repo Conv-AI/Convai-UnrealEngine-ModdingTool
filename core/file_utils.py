@@ -126,3 +126,23 @@ def remove_metahuman_if_scene(project_dir, asset_type):
         metahuman_dir = plugin_root / "Content" / "MetaHumans"
         delete_directory_if_exists(metahuman_dir)
         break  
+
+def copy_file_to_directory(file_path, target_dir):
+    """
+    Copies a file to the target directory.
+
+    :param file_path: Path to the file to be copied.
+    :param target_dir: Directory where the file should be copied.
+    :return: Path to the copied file.
+    """
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"Source file not found: {file_path}")
+
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+
+    file_name = os.path.basename(file_path)
+    destination_path = os.path.join(target_dir, file_name)
+
+    shutil.copy2(file_path, destination_path)
+    return destination_path
