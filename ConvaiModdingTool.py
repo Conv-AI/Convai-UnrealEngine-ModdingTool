@@ -5,7 +5,7 @@ import sys
 from core.asset_manager import get_api_key, get_asset_type_from_user, save_metadata, trim_unique_str, get_unique_str
 from core.download_utils import download_modding_dependencies
 from core.file_utils import copy_file_to_directory, remove_metahuman_if_scene
-from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, update_default_engine_ini, update_default_game_ini, verify_convai_plugin
+from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, update_default_engine_ini, update_default_game_ini, update_default_input_ini, verify_convai_plugin
 
 def main():
     """Main execution flow for setting up an Unreal Engine project."""  
@@ -36,6 +36,7 @@ def main():
     
     update_default_game_ini(project_dir, plugin_name)
     update_default_engine_ini(project_dir, convai_api_key)
+    update_default_input_ini(project_dir)
     
     download_modding_dependencies(project_dir)
     enable_plugins_in_uproject(project_dir, project_name, ["ConvAI", "ConvaiHTTP", "ConvaiPakManager", "JsonBlueprintUtilities", plugin_name])
