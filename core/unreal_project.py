@@ -468,6 +468,9 @@ def update_default_engine_ini(project_dir, convai_api_key):
 
     # Lines to append
     lines_to_add = f"""
+[/Script/EngineSettings.GameMapsSettings]
+GlobalDefaultGameMode=/Game/ConvaiConveniencePack/Sample/BP_SampleGameMode.BP_SampleGameMode_C
+
 [/Script/Convai.ConvaiSettings]
 API_Key={convai_api_key}
 """
