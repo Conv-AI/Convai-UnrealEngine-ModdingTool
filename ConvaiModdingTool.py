@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 import sys
 
-from core.asset_manager import get_api_key, get_asset_type_from_user, save_metadata, trim_unique_str, get_unique_str
+from core.asset_manager import get_api_key, get_asset_type_from_user, save_metadata, should_remove_metahuman_folder, trim_unique_str, get_unique_str
 from core.download_utils import download_modding_dependencies
-from core.file_utils import copy_file_to_directory, remove_metahuman_if_scene
+from core.file_utils import copy_file_to_directory, remove_metahuman_folder
 from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, update_default_engine_ini, update_default_game_ini, update_default_input_ini, verify_convai_plugin
 
 def main():
@@ -23,7 +23,7 @@ def main():
     
     project_name = get_project_name(script_dir)
     convai_api_key = get_api_key()
-    asset_type = get_asset_type_from_user()
+    asset_type, is_metahuman = get_asset_type_from_user()
     project_dir = os.path.join(script_dir, project_name)
     
     # Build project structure and exit if validations fail
@@ -45,7 +45,8 @@ def main():
     save_metadata(project_dir, "plugin_name", plugin_name)
     save_metadata(project_dir, "asset_type", asset_type)
     
-    remove_metahuman_if_scene(project_dir, asset_type)
+    if should_remove_metahuman_folder(asset_type, is_metahuman):
+        remove_metahuman_folder(project_dir)
     
     source = os.path.join(project_dir, "Plugins", "ConvaiPakManager", "Content", "Editor", "AssetUploader.uasset")
     destination = os.path.join(project_dir, "Content", "Editor")

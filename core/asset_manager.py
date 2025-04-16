@@ -60,19 +60,30 @@ def save_metadata(project_dir, field_name, field_value):
 def get_asset_type_from_user():
     """
     Prompts the user to choose between Scene (1) or Avatar (2).
+    If Avatar is selected, also asks if they are using a MetaHuman.
 
     Returns:
-        str: 'Scene' or 'Avatar'
+        tuple: (asset_type: str, is_metahuman: Optional[bool])
     """
     while True:
         print("Select the type of asset you want to create:")
         print("1. Scene")
         print("2. Avatar")
         choice = input("Enter your choice (1 or 2): ").strip()
+
         if choice == "1":
-            return "Scene"
+            return "Scene", None
+
         elif choice == "2":
-            return "Avatar"
+            while True:
+                meta_input = input("Are you using a MetaHuman for your avatar? (y/n): ").strip().lower()
+                if meta_input in ("y", "yes"):
+                    return "Avatar", True
+                elif meta_input in ("n", "no"):
+                    return "Avatar", False
+                else:
+                    print("Invalid input. Please enter 'y' or 'n'.")
+
         else:
             print("Invalid input. Please enter 1 or 2.")
 
@@ -83,3 +94,13 @@ def get_api_key():
             return convai_api_key
         else:
             print("Invalid API key. Please enter a valid alphanumeric key.")
+            
+def should_remove_metahuman_folder(asset_type, is_metahuman):
+    
+    if asset_type == "Scene":
+        return True
+    
+    if not is_metahuman :
+        return True
+    
+    return False

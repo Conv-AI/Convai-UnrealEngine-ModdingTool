@@ -3,8 +3,6 @@ from pathlib import Path
 import re
 import shutil
 
-from core.asset_manager import get_asset_type_from_user
-
 def update_file_content(file_path, old_value, new_value):
     """
     Replace old_value with new_value in the specified file, preserving case sensitivity.
@@ -109,16 +107,14 @@ def delete_directory_if_exists(directory_path):
         except Exception as e:
             print(f"Failed to delete {directory_path}: {e}")
 
-def remove_metahuman_if_scene(project_dir, asset_type):
+def remove_metahuman_folder(project_dir):
     """
     If user selects Scene, removes the MetaHuman folder from Convai plugin content.
 
     Args:
         unreal_engine_path (str): The path to the Unreal Engine installation.
     """
-    if asset_type != "Scene":
-        return
-
+    
     plugins_dir = Path(project_dir) / "Plugins"
     
     for plugin_path in plugins_dir.glob("*/ConvAI.uplugin"):
