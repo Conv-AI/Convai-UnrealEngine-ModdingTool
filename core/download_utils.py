@@ -238,3 +238,7 @@ def download_modding_dependencies(project_dir):
     
     #Necessary plugins
     download_plugins_from_gdrive_folder("11n7EZW4SBd4Ri9Q6GuXFdoLrwCZvnnwq", project_dir)
+
+def download_convai_realusion_content(project_dir):
+    download_from_gdrive("1bAatTW4vYycDbGLeO1pGILc3OVOOR3je", os.path.join(project_dir, "ConvaiEssentials"), "ConvaiRealusionContent.zip")
+    unzip_file(os.path.join(project_dir, "ConvaiEssentials", "ConvaiRealusionContent.zip"), os.path.join(project_dir))
