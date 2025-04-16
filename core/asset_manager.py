@@ -6,6 +6,9 @@ import os
 import sys
 import uuid
 
+from core.download_utils import download_convai_realusion_content
+from core.file_utils import copy_file_to_directory, remove_metahuman_folder
+
 def get_unique_str():
     """
     Fetch unique string
@@ -27,14 +30,13 @@ def trim_unique_str(asset_id):
 
     return project_name
 
-def save_metadata(project_dir, field_name, field_value):
+def save_metadata(project_dir, data: dict):
     """
-    Save or update a key-value pair in ModdingMetaData.txt inside ProjectDir/ConvaiEssentials/.
+    Save or update multiple key-value pairs in ModdingMetaData.txt inside ProjectDir/ConvaiEssentials/.
 
     Args:
         project_dir (str): Path to the Unreal project directory.
-        field_name (str): Key to add or update in the metadata file.
-        field_value (Any): Value to assign to the key.
+        data (dict): Dictionary of field_name -> field_value to save.
     """
     metadata_dir = os.path.join(project_dir, "ConvaiEssentials")
     os.makedirs(metadata_dir, exist_ok=True)
@@ -50,10 +52,10 @@ def save_metadata(project_dir, field_name, field_value):
         except (json.JSONDecodeError, IOError):
             print("Warning: Existing ModdingMetaData.txt is corrupted or unreadable. Overwriting.")
 
-    # Update/add the field
-    metadata[field_name] = field_value
+    # Update with new data
+    metadata.update(data)
 
-    # Save the updated metadata
+    # Save back to file
     with open(metadata_file, "w", encoding="utf-8") as file:
         json.dump(metadata, file, indent=4)
 
@@ -104,3 +106,18 @@ def should_remove_metahuman_folder(asset_type, is_metahuman):
         return True
     
     return False
+
+def move_asset_uploader_ui(project_dir):
+    source = os.path.join(project_dir, "Plugins", "ConvaiPakManager", "Content", "Editor", "AssetUploader.uasset")
+    destination = os.path.join(project_dir, "Content", "Editor")
+    copy_file_to_directory(source, destination)
+    
+def configure_assets_in_project(project_dir, asset_type, is_metahuman):
+    
+    move_asset_uploader_ui(project_dir)
+    
+    if should_remove_metahuman_folder(asset_type, is_metahuman):
+        remove_metahuman_folder(project_dir)
+    
+    if not is_metahuman and asset_type == "Avatar":
+        download_convai_realusion_content(project_dir)

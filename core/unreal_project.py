@@ -588,3 +588,8 @@ DefaultTouchInterface=/Engine/MobileResources/HUD/DefaultVirtualJoysticks.Defaul
     
     with open(default_input_ini_path, "w", encoding="utf-8") as file:
         file.write(content_to_write.strip() + "\n")
+
+def update_ini_files(project_dir, plugin_name, convai_api_key):
+    update_default_game_ini(project_dir, plugin_name)
+    update_default_engine_ini(project_dir, convai_api_key)
+    update_default_input_ini(project_dir)
