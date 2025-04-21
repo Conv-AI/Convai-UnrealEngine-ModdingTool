@@ -3,8 +3,8 @@ import base64
 import hashlib
 import json
 import os
-import sys
 import uuid
+import msvcrt
 
 from core.download_utils import download_convai_realusion_content
 from core.file_utils import copy_file_to_directory, remove_metahuman_folder
@@ -90,12 +90,28 @@ def get_asset_type_from_user():
             print("Invalid input. Please enter 1 or 2.")
 
 def get_api_key():
+    print("Enter the Convai API key: ", end='', flush=True)
+    key = ""
     while True:
-        convai_api_key = input("Enter the Convai API key: ").strip()
-        if convai_api_key and convai_api_key.isalnum():
-            return convai_api_key
+        ch = msvcrt.getch()
+        if ch in {b'\r', b'\n'}:
+            print()  # Move to next line after Enter
+            if key and key.isalnum():
+                return key
+            else:
+                print("Invalid API key. Please enter a valid alphanumeric key.")
+                return get_api_key()
+        elif ch == b'\x08':  # Backspace
+            if len(key) > 0:
+                key = key[:-1]
+                print('\b \b', end='', flush=True)
+        elif ch == b'\x03':  # Ctrl+C
+            raise KeyboardInterrupt
         else:
-            print("Invalid API key. Please enter a valid alphanumeric key.")
+            char = ch.decode()
+            if char.isalnum():
+                key += char
+                print('*', end='', flush=True)
             
 def should_remove_metahuman_folder(asset_type, is_metahuman):
     
