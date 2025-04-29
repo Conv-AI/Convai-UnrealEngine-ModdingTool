@@ -1,3 +1,4 @@
+import glob
 import os
 from pathlib import Path
 import re
@@ -106,6 +107,36 @@ def delete_directory_if_exists(directory_path):
             print(f"Deleted directory: {directory_path}")
         except Exception as e:
             print(f"Failed to delete {directory_path}: {e}")
+
+def delete_file_if_exists(file_path):
+    """
+    Deletes a file if it exists.
+
+    Args:
+        file_path (str): Path to the file to delete.
+    """
+    if os.path.exists(file_path):
+        if os.path.isfile(file_path):
+            try:
+                os.remove(file_path)
+                print(f"Deleted file: {file_path}")
+            except OSError as e:
+                print(f"❌ Error deleting file {file_path}: {e}")
+        else:
+            print(f"⚠️ Warning: Path exists but is not a file: {file_path}")
+    else:
+        print(f"⚠️ Warning: File not found: {file_path}")
+
+def delete_paths(paths_to_delete):
+    """Delete files or directories based on their type."""
+    for path_pattern in paths_to_delete:
+        for matched_path in glob.glob(path_pattern):
+            if os.path.isfile(matched_path):
+                delete_file_if_exists(matched_path)
+            elif os.path.isdir(matched_path):
+                delete_directory_if_exists(matched_path)
+            else:
+                print(f"⚠️ Warning: Path does not exist or unknown type: {matched_path}")
 
 def remove_metahuman_folder(project_dir):
     """

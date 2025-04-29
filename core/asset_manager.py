@@ -59,6 +59,30 @@ def save_metadata(project_dir, data: dict):
     with open(metadata_file, "w", encoding="utf-8") as file:
         json.dump(metadata, file, indent=4)
 
+def get_metadata(project_dir):
+    """
+    Load metadata from ModdingMetaData.txt inside ProjectDir/ConvaiEssentials/.
+
+    Args:
+        project_dir (str): Path to the Unreal project directory.
+
+    Returns:
+        dict: Loaded metadata dictionary, or empty dict if file not found or corrupted.
+    """
+    metadata_file = os.path.join(project_dir, "ConvaiEssentials", "ModdingMetaData.txt")
+
+    if not os.path.exists(metadata_file):
+        print(f"Warning: Metadata file not found at {metadata_file}. Returning empty metadata.")
+        return {}
+
+    try:
+        with open(metadata_file, "r", encoding="utf-8") as file:
+            metadata = json.load(file)
+            return metadata
+    except (json.JSONDecodeError, IOError):
+        print(f"Warning: Failed to load metadata from {metadata_file}. Returning empty metadata.")
+        return {}
+
 def get_asset_type_from_user():
     """
     Prompts the user to choose between Scene (1) or Avatar (2).
@@ -74,7 +98,7 @@ def get_asset_type_from_user():
         choice = input("Enter your choice (1 or 2): ").strip()
 
         if choice == "1":
-            return "Scene", None
+            return "Scene", False
 
         elif choice == "2":
             while True:
@@ -137,3 +161,23 @@ def configure_assets_in_project(project_dir, asset_type, is_metahuman):
     
     if not is_metahuman and asset_type == "Avatar":
         download_convai_realusion_content(project_dir)
+
+def get_user_flow_choice():
+    """
+    Prompts the user to choose between creating a new project or updating an existing one.
+
+    Returns:
+        str: "create" or "update"
+    """
+    while True:
+        print("\nWhat do you want to do?")
+        print("1. Create a new modding project")
+        print("2. Update an existing modding project")
+        choice = input("Enter your choice (1 or 2): ").strip()
+
+        if choice == "1":
+            return "create"
+        elif choice == "2":
+            return "update"
+        else:
+            print("Invalid input. Please enter 1 or 2.")
