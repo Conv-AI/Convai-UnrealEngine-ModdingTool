@@ -8,7 +8,8 @@ import time
 import webbrowser
 from pathlib import Path
 
-from core.file_utils import update_directory_structure
+from core.download_utils import download_modding_dependencies
+from core.file_utils import delete_paths, update_directory_structure
 
 def set_engine_version(uproject_file, engine_version):
     """
@@ -44,7 +45,7 @@ def run_unreal_build(ue_directory, project_name, project_dir):
         ubt_path,
         f"-Project={uproject_path}",
         f"-Target={project_name}Editor",
-        "Win64",  
+        "Win64",
         "Development",
         "-Progress",
         "-NoHotReload"
@@ -64,7 +65,7 @@ def build_project_structure(project_name, project_dir, ue_path, engine_version):
     Performs validation on the project name:
     - The project name must not exceed 20 characters.
     - The project directory must not already exist.
-    
+
     Returns:
         bool: True if the project structure was built successfully, False otherwise.
     """
@@ -79,7 +80,7 @@ def build_project_structure(project_name, project_dir, ue_path, engine_version):
         return False
 
     template_dir = os.path.join(ue_path, "Templates", "TP_Blank")
-    
+
     # Copy template
     shutil.copytree(template_dir, project_dir)
 
@@ -119,7 +120,7 @@ def extract_engine_version(installation_dir):
                     version['major'] = major_match.group(1)
                 if minor_match:
                     version['minor'] = minor_match.group(1)
-                    
+
         if 'major' in version and 'minor' in version:
             return f"{version['major']}.{version['minor']}"
         else:
@@ -136,7 +137,7 @@ def extract_engine_version(installation_dir):
 def is_valid_engine_path(ue_path: Path) -> bool:
     if not ue_path.exists():
         return False
-    
+
     engine_version = extract_engine_version(ue_path)
     if not engine_version or not is_supported_engine_version(engine_version):
         return False
@@ -185,7 +186,7 @@ def is_plugin_installed(ue_dir, plugin_name):
         bool: True if the plugin exists, False otherwise.
     """
     plugin_path = os.path.join(ue_dir, "Engine", "Plugins", "Marketplace", plugin_name)
-    
+
     return os.path.isdir(plugin_path)
 
 def enable_plugin_in_uproject(uproject_path, plugin_name, marketplace_url=""):
@@ -291,7 +292,7 @@ def create_content_only_plugin(project_dir: str, plugin_name: str):
     # Save the .uplugin file
     with open(uplugin_path, "w") as f:
         json.dump(uplugin_data, f, indent=4)
-   
+
 def is_valid_project_name(name: str, root_dir: Path):
     return (
         name and                      # name is not empty
@@ -327,51 +328,51 @@ def is_version_greater(v1, v2):
     """
     def parse_version(v):
         return [int(part) for part in v.split('.')]
-    
+
     v1_parts = parse_version(v1)
     v2_parts = parse_version(v2)
-    
+
     # Pad the shorter version with zeros (e.g., "3.6" becomes [3,6,0])
     max_length = max(len(v1_parts), len(v2_parts))
     v1_parts.extend([0] * (max_length - len(v1_parts)))
     v2_parts.extend([0] * (max_length - len(v2_parts)))
-    
+
     return v1_parts > v2_parts
 
 def verify_convai_plugin(ue_dir):
     """
     Verifies if the Convai plugin is installed and its version is greater than 3.5.2.
     If verification fails, it prompts the user to update the plugin using prompt_update_convai_plugin.
-    
+
     Args:
         ue_dir (str): The Unreal Engine installation directory.
-        
+
     Returns:
         bool: True if the Convai plugin is installed and its version is greater than 3.5.2,
               False otherwise.
     """
     plugin_name = "Convai"
     update_url = "https://www.fab.com/listings/ba3145af-d2ef-434a-8bc3-f3fa1dfe7d5c"
-    
+
     # Check if the plugin is installed.
     if not is_plugin_installed(ue_dir, plugin_name):
         prompt_update_convai_plugin(update_url, "Convai plugin is not installed.")
         return False
-    
+
     # Construct the path to the Convai plugin directory.
     plugin_path = os.path.join(ue_dir, "Engine", "Plugins", "Marketplace", plugin_name)
-    
+
     # Search for the .uplugin file in the plugin directory.
     uplugin_file = None
     for filename in os.listdir(plugin_path):
         if filename.endswith(".uplugin"):
             uplugin_file = os.path.join(plugin_path, filename)
             break
-    
+
     if not uplugin_file or not os.path.exists(uplugin_file):
         prompt_update_convai_plugin(update_url, "Error: .uplugin file not found for Convai plugin.")
         return False
-    
+
     # Load and parse the .uplugin file.
     try:
         with open(uplugin_file, "r", encoding="utf-8") as f:
@@ -379,12 +380,12 @@ def verify_convai_plugin(ue_dir):
     except Exception as e:
         prompt_update_convai_plugin(update_url, f"Error reading .uplugin file: {e}")
         return False
-    
+
     version_name = plugin_data.get("VersionName", "")
     if not version_name:
         prompt_update_convai_plugin(update_url, "Error: VersionName not found in the .uplugin file.")
         return False
-    
+
     if is_version_greater(version_name, "3.5.1"):
         print(f"Verification successful: Convai plugin version is {version_name}.")
         return True
@@ -396,7 +397,7 @@ def prompt_update_convai_plugin(update_url, error_message):
     """
     Prompts the user to update the Convai plugin by printing an error message,
     waiting 2 seconds, and opening the update URL in the default web browser.
-    
+
     Args:
         update_url (str): The URL to open for updating the plugin.
         error_message (str): The error message to display.
@@ -405,14 +406,14 @@ def prompt_update_convai_plugin(update_url, error_message):
     print("Please update the Convai plugin. Opening update link in your browser shortly...")
     time.sleep(2)
     webbrowser.open(update_url)
-    
+
 def update_default_game_ini(project_dir, plugin_name):
     """
     Updates the DefaultGame.ini file in the project's Config directory with the required settings.
-    
+
     This function writes hardcoded settings to DefaultGame.ini. It replaces the <PluginName> placeholder
     with the provided plugin_name.
-    
+
     Args:
         project_dir (str): The path to your Unreal project directory.
         plugin_name (str): The name of the content-only plugin.
@@ -420,10 +421,10 @@ def update_default_game_ini(project_dir, plugin_name):
     # Ensure the Config directory exists
     config_dir = os.path.join(project_dir, "Config")
     os.makedirs(config_dir, exist_ok=True)
-    
+
     # Path to the DefaultGame.ini file
     default_game_ini_path = os.path.join(config_dir, "DefaultGame.ini")
-    
+
     # Hardcoded INI content with <PluginName> placeholder
     ini_content = r'''
 [/Script/UnrealEd.ProjectPackagingSettings]
@@ -446,11 +447,11 @@ MetaDataTagsForAssetRegistry=()
     '''
     # Replace <PluginName> with the actual plugin name
     ini_content = ini_content.replace("<PluginName>", plugin_name)
-    
+
     # Write the content to DefaultGame.ini
     with open(default_game_ini_path, "w", encoding="utf-8") as file:
         file.write(ini_content.strip() + "\n")
-    
+
     print(f"DefaultGame.ini has been updated with plugin name: {plugin_name}")
 
 def update_default_engine_ini(project_dir, convai_api_key):
@@ -585,7 +586,7 @@ DefaultTouchInterface=/Engine/MobileResources/HUD/DefaultVirtualJoysticks.Defaul
 -ConsoleKeys=Tilde
 +ConsoleKeys=Tilde
 """
-    
+
     with open(default_input_ini_path, "w", encoding="utf-8") as file:
         file.write(content_to_write.strip() + "\n")
 
@@ -593,3 +594,51 @@ def update_ini_files(project_dir, plugin_name, convai_api_key):
     update_default_game_ini(project_dir, plugin_name)
     update_default_engine_ini(project_dir, convai_api_key)
     update_default_input_ini(project_dir)
+
+def update_modding_dependencies(project_dir):
+    paths_to_delete = [
+        os.path.join(project_dir, "Plugins", "Convai"),
+        os.path.join(project_dir, "Plugins", "ConvaiHTTP"),
+        os.path.join(project_dir, "Plugins", "ConvaiPakManager"),
+        os.path.join(project_dir, "Content", "ConvaiConveniencePack"),
+    ]
+    
+    zip_files = []
+    for filename in os.listdir(os.path.join(project_dir, "ConvaiEssentials")):
+        if filename.lower().endswith(".zip"):
+            zip_files.append(os.path.join(os.path.join(project_dir, "ConvaiEssentials"), filename))
+
+    delete_paths(paths_to_delete)
+    delete_paths(zip_files)
+    
+    download_modding_dependencies(project_dir)
+    
+def choose_project_dir(script_dir):
+    """
+    Scan script_dir for Unreal projects containing ConvaiEssentials,
+    prompt until a valid choice is entered, and return the chosen path.
+    """
+    # Find all matching projects
+    candidate_dirs = [
+        root
+        for root, dirs, files in os.walk(script_dir)
+        if "ConvaiEssentials" in dirs and any(f.endswith(".uproject") for f in files)
+    ]
+    if not candidate_dirs:
+        print(f"❌ No modding projects found under:\n   {script_dir}")
+        input("Press Enter to exit...")
+        exit(1)
+
+    # Prompt loop
+    while True:
+        print("\nSelect a project to update:")
+        for idx, path in enumerate(candidate_dirs, 1):
+            print(f"  {idx}. {os.path.basename(path)}")
+        choice = input(f"\nEnter choice [1-{len(candidate_dirs)}]: ").strip()
+        try:
+            sel = int(choice)
+            if 1 <= sel <= len(candidate_dirs):
+                return candidate_dirs[sel - 1]
+        except ValueError:
+            pass
+        print(f"❌ '{choice}' is not valid. Enter a number between 1 and {len(candidate_dirs)}.")
