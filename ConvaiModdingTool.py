@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import sys
 
-from core.asset_manager import configure_assets_in_project, get_api_key, get_asset_type_from_user, get_metadata, get_user_flow_choice, save_metadata
+from core.asset_manager import configure_assets_in_project, get_api_key, get_asset_type_from_user, get_user_flow_choice
 from core.download_utils import download_modding_dependencies
 from core.file_utility_manager import FileUtilityManager
 from core.unreal_project import build_project_structure, choose_project_dir, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, update_ini_files, update_modding_dependencies
@@ -27,7 +27,7 @@ def CreateModdingProject(script_dir):
         print("Exiting execution due to invalid project name or existing project directory.")
         exit(1)
     
-    plugin_name = FileUtilityManager.trim_unique_str(FileUtilityManager.get_unique_str())
+    plugin_name = FileUtilityManager.trim_unique_str(FileUtilityManager.generate_unique_str())
     create_content_only_plugin(project_dir, plugin_name)
     
     update_ini_files(project_dir, plugin_name, convai_api_key)
@@ -36,7 +36,7 @@ def CreateModdingProject(script_dir):
     
     enable_plugins_in_uproject(project_dir, project_name, ["ConvAI", "ConvaiHTTP", "ConvaiPakManager", "JsonBlueprintUtilities", plugin_name])
     
-    save_metadata(project_dir, {"project_name": project_name,"plugin_name": plugin_name,"asset_type": asset_type, "is_metahuman": is_metahuman})
+    FileUtilityManager.save_metadata(project_dir, {"project_name": project_name,"plugin_name": plugin_name,"asset_type": asset_type, "is_metahuman": is_metahuman})
     
     configure_assets_in_project(project_dir, asset_type, is_metahuman)
     
@@ -53,7 +53,7 @@ def UpdateModdingProject(script_dir):
         print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
         exit(1)
 
-    metadata = get_metadata(project_dir)        
+    metadata = FileUtilityManager.get_metadata(project_dir)        
     asset_type = metadata.get("asset_type")
     is_metahuman = metadata.get("is_metahuman")
     project_name = metadata.get("project_name")

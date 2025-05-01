@@ -76,40 +76,6 @@ class FileUtilityManager:
         return project_name
 
     @staticmethod
-    def write_metadata(metadata_path: str, data: dict) -> None:
-        """
-        Writes a JSON file at `metadata_path` containing `data`.
-        """
-        try:
-            os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
-            with open(metadata_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to write metadata to {metadata_path}: {e}")
-            raise
-        finally:
-            logger.info(f"write_metadata attempted at {metadata_path}")
-
-    @staticmethod
-    def read_metadata(metadata_path: str) -> dict:
-        """
-        Reads and returns JSON data from `metadata_path`, or {} if missing or invalid.
-        """
-        try:
-            if not os.path.isfile(metadata_path):
-                return {}
-            with open(metadata_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error reading {metadata_path}: {e}")
-            return {}
-        except Exception as e:
-            logger.error(f"Error reading metadata from {metadata_path}: {e}")
-            raise
-        finally:
-            logger.info(f"read_metadata attempted at {metadata_path}")
-
-    @staticmethod
     def delete_directory_if_exists(directory_path):
         """
         Deletes the specified directory if it exists.
@@ -264,3 +230,58 @@ class FileUtilityManager:
 
         pattern = re.compile(re.escape(old_value), re.IGNORECASE)
         return pattern.sub(replace_with_matching_case, text)
+
+    @staticmethod
+    def save_metadata(project_dir, data: dict):
+        """
+        Save or update multiple key-value pairs in ModdingMetaData.txt inside ProjectDir/ConvaiEssentials/.
+
+        Args:
+            project_dir (str): Path to the Unreal project directory.
+            data (dict): Dictionary of field_name -> field_value to save.
+        """
+        metadata_dir = os.path.join(project_dir, "ConvaiEssentials")
+        os.makedirs(metadata_dir, exist_ok=True)
+
+        metadata_file = os.path.join(metadata_dir, "ModdingMetaData.txt")
+
+        # Load existing metadata if the file exists
+        metadata = {}
+        if os.path.exists(metadata_file):
+            try:
+                with open(metadata_file, "r", encoding="utf-8") as file:
+                    metadata = json.load(file)
+            except (json.JSONDecodeError, IOError):
+                print("Warning: Existing ModdingMetaData.txt is corrupted or unreadable. Overwriting.")
+
+        # Update with new data
+        metadata.update(data)
+
+        # Save back to file
+        with open(metadata_file, "w", encoding="utf-8") as file:
+            json.dump(metadata, file, indent=4)
+
+    @staticmethod 
+    def get_metadata(project_dir):
+        """
+        Load metadata from ModdingMetaData.txt inside ProjectDir/ConvaiEssentials/.
+
+        Args:
+            project_dir (str): Path to the Unreal project directory.
+
+        Returns:
+            dict: Loaded metadata dictionary, or empty dict if file not found or corrupted.
+        """
+        metadata_file = os.path.join(project_dir, "ConvaiEssentials", "ModdingMetaData.txt")
+
+        if not os.path.exists(metadata_file):
+            print(f"Warning: Metadata file not found at {metadata_file}. Returning empty metadata.")
+            return {}
+
+        try:
+            with open(metadata_file, "r", encoding="utf-8") as file:
+                metadata = json.load(file)
+                return metadata
+        except (json.JSONDecodeError, IOError):
+            print(f"Warning: Failed to load metadata from {metadata_file}. Returning empty metadata.")
+            return {}

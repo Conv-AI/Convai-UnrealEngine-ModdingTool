@@ -1,17 +1,12 @@
 import importlib.util
 import os
-import subprocess
-import sys
 import zipfile
 import shutil
 import requests
 import time
+import gdown
 
 from core.file_utility_manager import FileUtilityManager
-
-def install_gdown():
-    """Installs gdown if it's not already installed."""
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "gdown"])
 
 def download_from_gdrive(file_id, download_dir, filename):
     """
@@ -22,11 +17,6 @@ def download_from_gdrive(file_id, download_dir, filename):
     - download_dir (str): The directory where the file will be downloaded.
     - filename (str): The name of the downloaded file.
     """
-    if not importlib.util.find_spec("gdown"):
-        install_gdown()
-        importlib.reload(importlib)
-
-    import gdown
 
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
@@ -44,20 +34,9 @@ def download_from_gdrive(file_id, download_dir, filename):
         print("Error: Download failed.")
         return None
 
-def download_plugins_from_gdrive_folder(folder_id, project_dir):
-    
-    if not importlib.util.find_spec("gdown"):
-        install_gdown()
-        importlib.reload(importlib)
-
-    import gdown
-    
+def download_plugins_from_gdrive_folder(folder_id, project_dir):   
     download_dir = os.path.join(project_dir, "ConvaiEssentials")
     os.makedirs(download_dir, exist_ok=True)
-    if not importlib.util.find_spec("gdown"):
-        install_gdown()
-        importlib.reload(importlib)
-    import gdown
     url = f"https://drive.google.com/drive/folders/{folder_id}"
     gdown.download_folder(url, output=download_dir, use_cookies=False, quiet=False)
     
@@ -73,7 +52,7 @@ def extract_plugin_zip(zip_path, project_dir):
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir, ignore_errors=True)
     os.makedirs(temp_dir, exist_ok=True)
-    FileUtilityManager.unzip_file(zip_path, temp_dir)
+    FileUtilityManager.unzip(zip_path, temp_dir)
     plugin_folder = None
     for root, _, files in os.walk(temp_dir):
         if any(f.endswith(".uplugin") for f in files):
@@ -98,7 +77,7 @@ def download_and_extract_plugin(project_dir):
     downloaded_file = download_from_gdrive(file_id, download_dir, filename)
     if downloaded_file:
         unzip_destination = os.path.join(project_dir, "Plugins", "ConvaiPakManager")
-        FileUtilityManager.unzip_file(downloaded_file, unzip_destination)
+        FileUtilityManager.unzip(downloaded_file, unzip_destination)
 
 def download_latest_github_release(github_repo, download_dir, filename, max_retries=3):
     """
@@ -218,11 +197,11 @@ def extract_and_install_plugin(zip_path, plugins_dir):
 def download_modding_dependencies(project_dir):
     #CC pak
     download_from_gdrive("1y2lkBFo7ebRFt8SIiV9ME1mmRwgpnM3h", os.path.join(project_dir, "ConvaiEssentials"), "ConvaiConveniencePack.zip")
-    FileUtilityManager.unzip_file(os.path.join(project_dir, "ConvaiEssentials", "ConvaiConveniencePack.zip"), os.path.join(project_dir, "Content"))
+    FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiConveniencePack.zip"), os.path.join(project_dir, "Content"))
     
     #Necessary plugins
     download_plugins_from_gdrive_folder("11n7EZW4SBd4Ri9Q6GuXFdoLrwCZvnnwq", project_dir)
 
 def download_convai_realusion_content(project_dir):
     download_from_gdrive("1bAatTW4vYycDbGLeO1pGILc3OVOOR3je", os.path.join(project_dir, "ConvaiEssentials"), "ConvaiRealusionContent.zip")
-    FileUtilityManager.unzip_file(os.path.join(project_dir, "ConvaiEssentials", "ConvaiRealusionContent.zip"), os.path.join(project_dir))
+    FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiRealusionContent.zip"), os.path.join(project_dir))
