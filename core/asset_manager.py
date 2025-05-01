@@ -162,13 +162,22 @@ def configure_assets_in_project(project_dir, asset_type, is_metahuman):
     if not is_metahuman and asset_type == "Avatar":
         download_convai_realusion_content(project_dir)
 
-def get_user_flow_choice():
+def get_user_flow_choice(script_dir):
     """
     Prompts the user to choose between creating a new project or updating an existing one.
 
     Returns:
         str: "create" or "update"
     """
+    # Scan for existing modding projects
+    existing_projects = []
+    for root, dirs, files in os.walk(script_dir):
+        if "ConvaiEssentials" in dirs and any(f.endswith(".uproject") for f in files):
+            existing_projects.append(root)
+
+    if not existing_projects:
+        return "create"
+    
     while True:
         print("\nWhat do you want to do?")
         print("1. Create a new modding project")

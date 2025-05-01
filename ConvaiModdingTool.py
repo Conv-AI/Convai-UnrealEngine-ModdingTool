@@ -7,14 +7,9 @@ from core.asset_manager import configure_assets_in_project, get_api_key, get_ass
 from core.download_utils import download_modding_dependencies
 from core.unreal_project import build_project_structure, choose_project_dir, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, update_ini_files, update_modding_dependencies
 
-def CreateModdingProject():
+def CreateModdingProject(script_dir):
     """Main execution flow for setting up an Unreal Engine project."""  
-    
-    if getattr(sys, 'frozen', False):  # Check if running as an exe
-        script_dir = os.path.dirname(os.path.abspath(sys.executable))
-    else:
-        script_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
-    
+        
     unreal_engine_path = get_unreal_engine_path(["E:/Software/UE_5.3", "D:/Software/UnrealEngine/UE_5.3/UE_5.3", "C:/Program Files/Epic Games/UE_5.3"])  
     engine_version = extract_engine_version(unreal_engine_path)        
     if not engine_version or not is_supported_engine_version(engine_version):
@@ -46,16 +41,11 @@ def CreateModdingProject():
     
     run_unreal_build(unreal_engine_path, project_name, project_dir)
 
-def UpdateModdingProject():
+def UpdateModdingProject(script_dir):
     """Main execution flow for updating an existing Unreal Engine modding project."""
     
-    if getattr(sys, 'frozen', False):
-        script_dir = os.path.dirname(os.path.abspath(sys.executable))
-    else:
-        script_dir = Path(__file__).resolve().parent.parent
-
     project_dir = choose_project_dir(script_dir)
-        
+    
     unreal_engine_path = get_unreal_engine_path(["E:/Software/UE_5.3", "D:/Software/UnrealEngine/UE_5.3/UE_5.3", "C:/Program Files/Epic Games/UE_5.3"])  
     engine_version = extract_engine_version(unreal_engine_path)        
     if not engine_version or not is_supported_engine_version(engine_version):
@@ -74,12 +64,18 @@ def UpdateModdingProject():
     
 def main():
     print("Welcome to the Convai Modding Tool!")
-    user_choice = get_user_flow_choice()
+    
+    if getattr(sys, 'frozen', False):
+        script_dir = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        script_dir = Path(__file__).resolve().parent.parent
+    
+    user_choice = get_user_flow_choice(script_dir)
     
     if user_choice == "create":
-        CreateModdingProject()
+        CreateModdingProject(script_dir)
     elif user_choice == "update":
-        UpdateModdingProject()
+        UpdateModdingProject(script_dir)
     
     input("Press Enter to exit...")
 
