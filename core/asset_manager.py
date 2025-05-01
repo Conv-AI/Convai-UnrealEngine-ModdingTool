@@ -1,34 +1,9 @@
-
-import base64
-import hashlib
 import json
 import os
-import uuid
 import msvcrt
 
 from core.download_utils import download_convai_realusion_content
-from core.file_utils import copy_file_to_directory, remove_metahuman_folder
-
-def get_unique_str():
-    """
-    Fetch unique string
-    """
-    return str(uuid.uuid4())
-
-def trim_unique_str(asset_id):
-    """
-    Generate a 20-character Unreal Engine-compatible project name from the asset ID.
-    Ensures that the name starts with a letter (A-Z).
-    """
-    hash_object = hashlib.sha256(asset_id.encode())  # Hash the asset ID
-    base32_encoded = base64.b32encode(hash_object.digest()).decode()  # Base32 encoding (A-Z, 2-7)
-    project_name = base32_encoded[:20]  # Truncate to 20 characters
-
-    # Ensure first character is a letter (A-Z)
-    if project_name[0].isdigit():
-        project_name = "A" + project_name[1:]  # Replace the first character with 'A'
-
-    return project_name
+from core.file_utility_manager import FileUtilityManager
 
 def save_metadata(project_dir, data: dict):
     """
@@ -150,14 +125,14 @@ def should_remove_metahuman_folder(asset_type, is_metahuman):
 def move_asset_uploader_ui(project_dir):
     source = os.path.join(project_dir, "Plugins", "ConvaiPakManager", "Content", "Editor", "AssetUploader.uasset")
     destination = os.path.join(project_dir, "Content", "Editor")
-    copy_file_to_directory(source, destination)
+    FileUtilityManager.copy_file_to_directory(source, destination)
     
 def configure_assets_in_project(project_dir, asset_type, is_metahuman):
     
     move_asset_uploader_ui(project_dir)
     
     if should_remove_metahuman_folder(asset_type, is_metahuman):
-        remove_metahuman_folder(project_dir)
+        FileUtilityManager.remove_metahuman_folder(project_dir)
     
     if not is_metahuman and asset_type == "Avatar":
         download_convai_realusion_content(project_dir)

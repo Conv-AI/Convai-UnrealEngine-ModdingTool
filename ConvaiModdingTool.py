@@ -3,8 +3,9 @@ import os
 from pathlib import Path
 import sys
 
-from core.asset_manager import configure_assets_in_project, get_api_key, get_asset_type_from_user, get_metadata, get_user_flow_choice, save_metadata, trim_unique_str, get_unique_str
+from core.asset_manager import configure_assets_in_project, get_api_key, get_asset_type_from_user, get_metadata, get_user_flow_choice, save_metadata
 from core.download_utils import download_modding_dependencies
+from core.file_utility_manager import FileUtilityManager
 from core.unreal_project import build_project_structure, choose_project_dir, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, update_ini_files, update_modding_dependencies
 
 def CreateModdingProject(script_dir):
@@ -26,7 +27,7 @@ def CreateModdingProject(script_dir):
         print("Exiting execution due to invalid project name or existing project directory.")
         exit(1)
     
-    plugin_name = trim_unique_str(get_unique_str())
+    plugin_name = FileUtilityManager.trim_unique_str(FileUtilityManager.get_unique_str())
     create_content_only_plugin(project_dir, plugin_name)
     
     update_ini_files(project_dir, plugin_name, convai_api_key)

@@ -3,13 +3,12 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import time
 import webbrowser
 from pathlib import Path
 
 from core.download_utils import download_modding_dependencies
-from core.file_utils import delete_paths, update_directory_structure
+from core.file_utility_manager import FileUtilityManager
 
 def set_engine_version(uproject_file, engine_version):
     """
@@ -90,7 +89,7 @@ def build_project_structure(project_name, project_dir, ue_path, engine_version):
         os.makedirs(content_dir)
 
     # Replace all occurrences of the template name in the project
-    update_directory_structure(project_dir, "TP_Blank", project_name)
+    FileUtilityManager.update_directory_structure(project_dir, "TP_Blank", project_name)
 
     # Update the .uproject file with the correct engine version
     uproject_file = os.path.join(project_dir, f"{project_name}.uproject")
@@ -608,8 +607,8 @@ def update_modding_dependencies(project_dir):
         if filename.lower().endswith(".zip"):
             zip_files.append(os.path.join(os.path.join(project_dir, "ConvaiEssentials"), filename))
 
-    delete_paths(paths_to_delete)
-    delete_paths(zip_files)
+    FileUtilityManager.delete_paths(paths_to_delete)
+    FileUtilityManager.delete_paths(zip_files)
     
     download_modding_dependencies(project_dir)
     
