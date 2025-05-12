@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import sys
 
-from core.download_utils import download_modding_dependencies
+from core.download_utils import DownloadManager
 from core.file_utility_manager import FileUtilityManager
 from core.input_manager import InputManager
 from core.unreal_engine_manager import UnrealEngineManager
@@ -31,7 +31,7 @@ def CreateModdingProject(script_dir):
     
     UnrealEngineManager.update_ini_files(project_dir, plugin_name, convai_api_key)
     
-    download_modding_dependencies(project_dir)
+    DownloadManager.download_modding_dependencies(project_dir)
     
     UnrealEngineManager.enable_plugins(project_dir, project_name, ["ConvAI", "ConvaiHTTP", "ConvaiPakManager", "JsonBlueprintUtilities", plugin_name])
     
@@ -61,7 +61,7 @@ def UpdateModdingProject(script_dir):
     UnrealEngineManager.configure_assets_in_project(project_dir, asset_type, is_metahuman)
     
     UnrealEngineManager.run_unreal_build(unreal_engine_path, project_name, project_dir)
-    
+
 def main():
     print("Welcome to the Convai Modding Tool!")
     

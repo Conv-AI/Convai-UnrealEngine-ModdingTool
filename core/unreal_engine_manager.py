@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from core.download_utils import download_convai_realusion_content, download_modding_dependencies
+from core.download_utils import DownloadManager
 from core.file_utility_manager import FileUtilityManager
 
 class UnrealEngineManager:
@@ -390,7 +390,7 @@ DefaultTouchInterface=/Engine/MobileResources/HUD/DefaultVirtualJoysticks.Defaul
         FileUtilityManager.delete_paths(paths_to_delete)
         FileUtilityManager.delete_paths(zip_files)
         
-        download_modding_dependencies(project_dir)
+        DownloadManager.download_modding_dependencies(project_dir)
     
     @staticmethod
     def configure_assets_in_project(project_dir, asset_type, is_metahuman):
@@ -403,4 +403,4 @@ DefaultTouchInterface=/Engine/MobileResources/HUD/DefaultVirtualJoysticks.Defaul
             FileUtilityManager.remove_metahuman_folder(project_dir)       
         
         if not is_metahuman and asset_type == "Avatar":
-            download_convai_realusion_content(project_dir)
+            DownloadManager.download_convai_realusion_content(project_dir)
