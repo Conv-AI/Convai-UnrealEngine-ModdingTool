@@ -2,6 +2,8 @@ import os
 import msvcrt
 from pathlib import Path
 
+from core.unreal_engine_manager import UnrealEngineManager
+
 class InputManager:
     """Handles all user input prompts across the Convai Modding Tool."""
 
@@ -120,8 +122,6 @@ class InputManager:
         Returns:
             str: A valid Unreal Engine 5.3 path.
         """
-        from core.unreal_project import is_valid_engine_path
-
         if default_paths is None:
             default_paths = []
         elif isinstance(default_paths, str):
@@ -129,7 +129,7 @@ class InputManager:
 
         for default_path in default_paths:
             path_obj = Path(default_path)
-            if is_valid_engine_path(path_obj):
+            if UnrealEngineManager.is_valid_engine_path(path_obj):
                 response = input(f"Found valid Unreal Engine path: {path_obj}\nDo you want to use this path? (Y/N): ").strip().lower()
                 if response in ("", "y", "yes"):
                     return str(path_obj)
@@ -137,7 +137,7 @@ class InputManager:
         while True:
             user_input = input("Enter the Unreal Engine 5.3 installation directory: ").strip()
             engine_path = Path(user_input)
-            if is_valid_engine_path(engine_path):
+            if UnrealEngineManager.is_valid_engine_path(engine_path):
                 print(f"Using Unreal Engine path: {engine_path}")
                 return str(engine_path)
             else:
