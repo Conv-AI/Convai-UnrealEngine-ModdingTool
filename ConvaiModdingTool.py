@@ -1,25 +1,25 @@
-
 import os
 from pathlib import Path
 import sys
 
-from core.asset_manager import configure_assets_in_project, get_api_key, get_asset_type_from_user, get_user_flow_choice
+from core.asset_manager import configure_assets_in_project
 from core.download_utils import download_modding_dependencies
 from core.file_utility_manager import FileUtilityManager
-from core.unreal_project import build_project_structure, choose_project_dir, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, get_project_name, get_unreal_engine_path, is_supported_engine_version, run_unreal_build, update_ini_files, update_modding_dependencies
+from core.input_manager import InputManager
+from core.unreal_project import build_project_structure, create_content_only_plugin, enable_plugins_in_uproject, extract_engine_version, is_supported_engine_version, run_unreal_build, update_ini_files, update_modding_dependencies
 
 def CreateModdingProject(script_dir):
     """Main execution flow for setting up an Unreal Engine project."""  
         
-    unreal_engine_path = get_unreal_engine_path(["E:/Software/UE_5.3", "D:/Software/UnrealEngine/UE_5.3/UE_5.3", "C:/Program Files/Epic Games/UE_5.3"])  
+    unreal_engine_path = InputManager.get_unreal_engine_path(["E:/Software/UE_5.3", "D:/Software/UnrealEngine/UE_5.3/UE_5.3", "C:/Program Files/Epic Games/UE_5.3"])  
     engine_version = extract_engine_version(unreal_engine_path)        
     if not engine_version or not is_supported_engine_version(engine_version):
         print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
         exit(1)
     
-    project_name = get_project_name(script_dir)
-    convai_api_key = get_api_key()
-    asset_type, is_metahuman = get_asset_type_from_user()
+    project_name = InputManager.get_project_name(script_dir)
+    convai_api_key = InputManager.get_api_key()
+    asset_type, is_metahuman = InputManager.get_asset_type()
     project_dir = os.path.join(script_dir, project_name)
     
     # Build project structure and exit if validations fail
@@ -45,9 +45,9 @@ def CreateModdingProject(script_dir):
 def UpdateModdingProject(script_dir):
     """Main execution flow for updating an existing Unreal Engine modding project."""
     
-    project_dir = choose_project_dir(script_dir)
+    project_dir = InputManager.choose_project_dir(script_dir)
     
-    unreal_engine_path = get_unreal_engine_path(["E:/Software/UE_5.3", "D:/Software/UnrealEngine/UE_5.3/UE_5.3", "C:/Program Files/Epic Games/UE_5.3"])  
+    unreal_engine_path = InputManager.get_unreal_engine_path(["E:/Software/UE_5.3", "D:/Software/UnrealEngine/UE_5.3/UE_5.3", "C:/Program Files/Epic Games/UE_5.3"])  
     engine_version = extract_engine_version(unreal_engine_path)        
     if not engine_version or not is_supported_engine_version(engine_version):
         print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
@@ -71,7 +71,7 @@ def main():
     else:
         script_dir = Path(__file__).resolve().parent.parent
     
-    user_choice = get_user_flow_choice(script_dir)
+    user_choice = InputManager.get_user_flow_choice(script_dir)
     
     if user_choice == "create":
         CreateModdingProject(script_dir)

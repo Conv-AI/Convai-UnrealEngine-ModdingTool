@@ -142,37 +142,6 @@ def is_valid_engine_path(ue_path: Path) -> bool:
         return False
     return True
 
-def get_unreal_engine_path(default_paths=None):
-    """
-    Retrieve and validate the Unreal Engine installation directory.
-
-    Args:
-        default_paths (str or list of str, optional): One or more default Unreal Engine paths to try.
-
-    Returns:
-        str: A valid Unreal Engine directory path.
-    """
-    if default_paths is None:
-        default_paths = []
-    elif isinstance(default_paths, str):
-        default_paths = [default_paths]
-
-    for default_path in default_paths:
-        path_obj = Path(default_path)
-        if is_valid_engine_path(path_obj):
-            response = input(f"Found valid Unreal Engine path: {path_obj}\nDo you want to use this path? (Y/N): ").strip().lower()
-            if response in ("", "y", "yes"):
-                return str(path_obj)
-
-    while True:
-        user_input = input("Enter the Unreal Engine 5.3 installation directory: ").strip()
-        engine_path = Path(user_input)
-        if is_valid_engine_path(engine_path):
-            print(f"Using Unreal Engine path: {engine_path}")
-            return str(engine_path)
-        else:
-            print("Invalid path Unreal Engine 5.3 path")
-
 def is_plugin_installed(ue_dir, plugin_name):
     """
     Checks if a plugin is installed in the Unreal Engine project.
@@ -298,27 +267,6 @@ def is_valid_project_name(name: str, root_dir: Path):
         not name[0].isdigit() and     # doesn't start with a digit
         not (root_dir / name).exists()  # doesn't already exist
     )
-
-def get_project_name(project_root_dir: str):
-    """
-    Prompt for or retrieve a valid project name that:
-    - Doesn't start with a number
-    - Doesn't already exist under the specified project root directory
-
-    Args:
-        project_root_dir (str or Path): Directory where the new project will be created.
-
-    Returns:
-        str: A validated project name.
-    """
-    root_dir = Path(project_root_dir)
-
-    while True:
-        name = input(f"Enter the Project Name: ").strip()
-        if is_valid_project_name(name, root_dir):
-            return name
-        else :
-            print("Enter a valid project name")
 
 def is_version_greater(v1, v2):
     """
@@ -611,33 +559,3 @@ def update_modding_dependencies(project_dir):
     FileUtilityManager.delete_paths(zip_files)
     
     download_modding_dependencies(project_dir)
-    
-def choose_project_dir(script_dir):
-    """
-    Scan script_dir for Unreal projects containing ConvaiEssentials,
-    prompt until a valid choice is entered, and return the chosen path.
-    """
-    # Find all matching projects
-    candidate_dirs = [
-        root
-        for root, dirs, files in os.walk(script_dir)
-        if "ConvaiEssentials" in dirs and any(f.endswith(".uproject") for f in files)
-    ]
-    if not candidate_dirs:
-        print(f"❌ No modding projects found under:\n   {script_dir}")
-        input("Press Enter to exit...")
-        exit(1)
-
-    # Prompt loop
-    while True:
-        print("\nSelect a project to update:")
-        for idx, path in enumerate(candidate_dirs, 1):
-            print(f"  {idx}. {os.path.basename(path)}")
-        choice = input(f"\nEnter choice [1-{len(candidate_dirs)}]: ").strip()
-        try:
-            sel = int(choice)
-            if 1 <= sel <= len(candidate_dirs):
-                return candidate_dirs[sel - 1]
-        except ValueError:
-            pass
-        print(f"❌ '{choice}' is not valid. Enter a number between 1 and {len(candidate_dirs)}.")
