@@ -16,10 +16,148 @@ class UnrealEngineManager:
         self.ue_dir = ue_dir
         self.project_name = project_name
         self.project_dir = project_dir
-        self.engine_version = UnrealEngineManager.extract_engine_version(ue_dir)
+        self.engine_version = UnrealEngineManager._extract_engine_version(ue_dir)
+        
+    def build_project_structure(self) -> bool:
+        """
+        Creates a new Unreal Engine project based on the TP_Blank template.
+        """
+        if not all([self.ue_dir, self.project_name, self.project_dir, self.engine_version]):
+            raise ValueError("UnrealEngineManager not fully initialized.")
+        if len(self.project_name) > 20:
+            print("Error: Project name exceeds 20 characters.")
+            return False
+        if os.path.exists(self.project_dir):
+            print(f"Error: Directory exists: {self.project_dir}")
+            return False
+
+        template = os.path.join(self.ue_dir, "Templates", "TP_Blank")
+        shutil.copytree(template, self.project_dir)
+        os.makedirs(os.path.join(self.project_dir, 'Content'), exist_ok=True)
+        FileUtilityManager.update_directory_structure(self.project_dir, "TP_Blank", self.project_name)
+        self._set_engine_version(
+            os.path.join(self.project_dir, f"{self.project_name}.uproject"),
+            self.engine_version
+        )
+        print(f"Created project '{self.project_name}' at {self.project_dir}")
+        return True
+
+    def run_unreal_build(self) -> None:
+        ubt = os.path.join(
+            self.ue_dir,
+            "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"
+        )
+        if not os.path.exists(ubt):
+            print(f"Error: UBT not found: {ubt}")
+            return
+        cmd = [
+            ubt,
+            f"-Project={self.project_dir}/{self.project_name}.uproject",
+            f"-Target={self.project_name}Editor",
+            "Win64",
+            "Development",
+            "-Progress",
+            "-NoHotReload",
+        ]
+        print("Building Unreal project...")
+        result = subprocess.run(cmd, shell=True)
+        if result.returncode != 0:
+            print("Compilation failed.")
+        else:
+            print("Compilation succeeded.")
+
+    def enable_plugins(self, plugins: list[str]) -> None:
+        uproject_path = os.path.join(self.project_dir, f"{self.project_name}.uproject")
+        for plugin in plugins:
+            self._enable_plugin(uproject_path, plugin)
+
+    def create_content_only_plugin(self, plugin_name: str) -> None:
+        plugin_dir = Path(self.project_dir) / 'Plugins' / plugin_name
+        content_dir = plugin_dir / 'Content'
+        os.makedirs(content_dir, exist_ok=True)
+        up_file = plugin_dir / f"{plugin_name}.uplugin"
+        data = {
+            'FileVersion': 3,
+            'Version': 1,
+            'VersionName': '1.0',
+            'FriendlyName': plugin_name,
+            'Description': f"{plugin_name} content-only plugin.",
+            'Category': 'Other',
+            'CreatedBy': 'Convai modding tool',
+            'CanContainContent': True,
+            'Installed': False,
+        }
+        with open(up_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+
+    def update_ini_files(self, plugin_name: str, api_key: str) -> None:
+        self._update_game_ini(self.project_dir, plugin_name)
+        self._update_engine_ini(self.project_dir, api_key)
+        self._update_input_ini(self.project_dir)
+
+    def update_modding_dependencies(self) -> None:
+        paths_to_delete = [
+            os.path.join(self.project_dir, "Plugins", "Convai"),
+            os.path.join(self.project_dir, "Plugins", "ConvaiHTTP"),
+            os.path.join(self.project_dir, "Plugins", "ConvaiPakManager"),
+            os.path.join(self.project_dir, "Content", "ConvaiConveniencePack"),
+        ]
+        zip_dir = os.path.join(self.project_dir, "ConvaiEssentials")
+        zip_files = [os.path.join(zip_dir, f) for f in os.listdir(zip_dir) if f.lower().endswith(".zip")]
+
+        FileUtilityManager.delete_paths(paths_to_delete)
+        FileUtilityManager.delete_paths(zip_files)
+        DownloadManager.download_modding_dependencies(self.project_dir)
+    
+    def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
+        source = os.path.join(
+            self.project_dir,
+            "Plugins",
+            "ConvaiPakManager",
+            "Content",
+            "Editor",
+            "AssetUploader.uasset"
+        )
+        destination = os.path.join(self.project_dir, "Content", "Editor")
+        FileUtilityManager.copy_file_to_directory(source, destination)
+
+        if asset_type == "Scene" and not is_metahuman:
+            FileUtilityManager.remove_metahuman_folder(self.project_dir)
+        if asset_type == "Avatar" and not is_metahuman:
+            DownloadManager.download_convai_realusion_content(self.project_dir)
+    
+    def can_create_modding_project(self) -> None:
+        """
+        Verifies that all prerequisites for creating a modding project are met.
+        Checks Unreal Engine version and cross-compilation toolchain.
+        Exits the process with an error message if any check fails.
+        """
+        # Engine version check
+        if not self.engine_version or not UnrealEngineManager.is_supported_engine_version(self.engine_version):
+            print(f"❌ Error: Unreal Engine version {self.engine_version} is not supported. Supported versions: 5.3.")
+            return False
+
+        # Cross-compilation toolchain check
+        toolchain_root = os.environ.get("LINUX_MULTIARCH_ROOT")          
+        required_version = "v22_clang-16.0.6-centos7"
+        
+        if not toolchain_root:
+            print("❌ Error: LINUX_MULTIARCH_ROOT is not set.")
+            return False
+        
+        basename = os.path.basename(toolchain_root.strip("\\/"))        
+        if basename != required_version:
+            print(f"❌ Error: Cross-compilation toolchain version mismatch. Found '{basename}', expected '{required_version}'.")
+            return False
+        
+        if not os.path.exists(toolchain_root):
+            print(f"❌ Error: Toolchain path does not exist: {toolchain_root}")
+            return False
+        
+        return True
     
     @staticmethod
-    def extract_engine_version(installation_dir: str) -> str:
+    def _extract_engine_version(installation_dir: str) -> str:
         """
         Parses Version.h to determine engine version.
         """
@@ -60,35 +198,11 @@ class UnrealEngineManager:
     def is_valid_engine_path(path: Path) -> bool:
         if not path.exists():
             return False
-        ver = UnrealEngineManager.extract_engine_version(str(path))
+        ver = UnrealEngineManager._extract_engine_version(str(path))
         return bool(ver and UnrealEngineManager.is_supported_engine_version(ver))
 
-    def build_project_structure(self) -> bool:
-        """
-        Creates a new Unreal Engine project based on the TP_Blank template.
-        """
-        if not all([self.ue_dir, self.project_name, self.project_dir, self.engine_version]):
-            raise ValueError("UnrealEngineManager not fully initialized.")
-        if len(self.project_name) > 20:
-            print("Error: Project name exceeds 20 characters.")
-            return False
-        if os.path.exists(self.project_dir):
-            print(f"Error: Directory exists: {self.project_dir}")
-            return False
-
-        template = os.path.join(self.ue_dir, "Templates", "TP_Blank")
-        shutil.copytree(template, self.project_dir)
-        os.makedirs(os.path.join(self.project_dir, 'Content'), exist_ok=True)
-        FileUtilityManager.update_directory_structure(self.project_dir, "TP_Blank", self.project_name)
-        self.set_engine_version(
-            os.path.join(self.project_dir, f"{self.project_name}.uproject"),
-            self.engine_version
-        )
-        print(f"Created project '{self.project_name}' at {self.project_dir}")
-        return True
-
     @staticmethod
-    def set_engine_version(uproject_file: str, engine_version: str) -> None:
+    def _set_engine_version(uproject_file: str, engine_version: str) -> None:
         try:
             with open(uproject_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -97,35 +211,6 @@ class UnrealEngineManager:
                 json.dump(data, f, indent=4)
         except Exception as e:
             print(f"Error updating .uproject: {e}")
-
-    def run_unreal_build(self) -> None:
-        ubt = os.path.join(
-            self.ue_dir,
-            "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"
-        )
-        if not os.path.exists(ubt):
-            print(f"Error: UBT not found: {ubt}")
-            return
-        cmd = [
-            ubt,
-            f"-Project={self.project_dir}/{self.project_name}.uproject",
-            f"-Target={self.project_name}Editor",
-            "Win64",
-            "Development",
-            "-Progress",
-            "-NoHotReload",
-        ]
-        print("Building Unreal project...")
-        result = subprocess.run(cmd, shell=True)
-        if result.returncode != 0:
-            print("Compilation failed.")
-        else:
-            print("Compilation succeeded.")
-
-    def enable_plugins(self, plugins: list[str]) -> None:
-        uproject_path = os.path.join(self.project_dir, f"{self.project_name}.uproject")
-        for plugin in plugins:
-            self._enable_plugin(uproject_path, plugin)
 
     @staticmethod
     def _enable_plugin(
@@ -148,30 +233,6 @@ class UnrealEngineManager:
             return True
         except:
             return False
-
-    def create_content_only_plugin(self, plugin_name: str) -> None:
-        plugin_dir = Path(self.project_dir) / 'Plugins' / plugin_name
-        content_dir = plugin_dir / 'Content'
-        os.makedirs(content_dir, exist_ok=True)
-        up_file = plugin_dir / f"{plugin_name}.uplugin"
-        data = {
-            'FileVersion': 3,
-            'Version': 1,
-            'VersionName': '1.0',
-            'FriendlyName': plugin_name,
-            'Description': f"{plugin_name} content-only plugin.",
-            'Category': 'Other',
-            'CreatedBy': 'Convai modding tool',
-            'CanContainContent': True,
-            'Installed': False,
-        }
-        with open(up_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-
-    def update_ini_files(self, plugin_name: str, api_key: str) -> None:
-        self._update_game_ini(self.project_dir, plugin_name)
-        self._update_engine_ini(self.project_dir, api_key)
-        self._update_input_ini(self.project_dir)
 
     @staticmethod
     def _update_game_ini(project_dir, plugin_name):
@@ -358,34 +419,3 @@ DefaultTouchInterface=/Engine/MobileResources/HUD/DefaultVirtualJoysticks.Defaul
 
         with open(default_input_ini_path, "w", encoding="utf-8") as file:
             file.write(content_to_write.strip() + "\n")
-
-    def update_modding_dependencies(self) -> None:
-        paths_to_delete = [
-            os.path.join(self.project_dir, "Plugins", "Convai"),
-            os.path.join(self.project_dir, "Plugins", "ConvaiHTTP"),
-            os.path.join(self.project_dir, "Plugins", "ConvaiPakManager"),
-            os.path.join(self.project_dir, "Content", "ConvaiConveniencePack"),
-        ]
-        zip_dir = os.path.join(self.project_dir, "ConvaiEssentials")
-        zip_files = [os.path.join(zip_dir, f) for f in os.listdir(zip_dir) if f.lower().endswith(".zip")]
-
-        FileUtilityManager.delete_paths(paths_to_delete)
-        FileUtilityManager.delete_paths(zip_files)
-        DownloadManager.download_modding_dependencies(self.project_dir)
-    
-    def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
-        source = os.path.join(
-            self.project_dir,
-            "Plugins",
-            "ConvaiPakManager",
-            "Content",
-            "Editor",
-            "AssetUploader.uasset"
-        )
-        destination = os.path.join(self.project_dir, "Content", "Editor")
-        FileUtilityManager.copy_file_to_directory(source, destination)
-
-        if asset_type == "Scene" and not is_metahuman:
-            FileUtilityManager.remove_metahuman_folder(self.project_dir)
-        if asset_type == "Avatar" and not is_metahuman:
-            DownloadManager.download_convai_realusion_content(self.project_dir)

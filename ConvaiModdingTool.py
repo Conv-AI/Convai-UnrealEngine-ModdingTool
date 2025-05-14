@@ -22,15 +22,14 @@ def CreateModdingProject():
     ue_dir = input_manager.get_unreal_engine_path()
     project_name = input_manager.get_project_name()
     project_dir = os.path.join(input_manager.get_script_dir(), project_name)
+    
+    ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)    
+    if not ue_manager.can_create_modding_project():
+        exit(1)
+    
     convai_api_key = input_manager.get_api_key()
     asset_type, is_metahuman = input_manager.get_asset_type()
     
-    ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)
-    
-    if not ue_manager.engine_version or not UnrealEngineManager.is_supported_engine_version(ue_manager.engine_version):
-        print(f"❌ Error: Unreal Engine version {ue_manager.engine_version} is not supported. Supported versions: 5.3.")
-        exit(1)
-        
     if not ue_manager.build_project_structure():
         print("Exiting execution due to invalid project name or existing project directory.")
         exit(1)
@@ -61,8 +60,7 @@ def UpdateModdingProject():
     
     ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)
     
-    if not ue_manager.engine_version or not UnrealEngineManager.is_supported_engine_version(ue_manager.engine_version):
-        print(f"❌ Error: Unreal Engine version {ue_manager.engine_version} is not supported. Supported versions: 5.3.")
+    if not ue_manager.can_create_modding_project():
         exit(1)
     
     ue_manager.update_modding_dependencies()
