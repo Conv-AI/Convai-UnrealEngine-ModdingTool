@@ -19,55 +19,55 @@ input_manager = InputManager(get_script_dir(), ["E:/Software/UE_5.3", "D:/Softwa
 def CreateModdingProject():
     """Main execution flow for setting up an Unreal Engine project."""  
 
-    unreal_engine_path = input_manager.get_unreal_engine_path()  
-    engine_version = UnrealEngineManager.extract_engine_version(unreal_engine_path)        
-    if not engine_version or not UnrealEngineManager.is_supported_engine_version(engine_version):
-        print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
-        exit(1)
-    
+    ue_dir = input_manager.get_unreal_engine_path()
     project_name = input_manager.get_project_name()
+    project_dir = os.path.join(input_manager.get_script_dir(), project_name)
     convai_api_key = input_manager.get_api_key()
     asset_type, is_metahuman = input_manager.get_asset_type()
-    project_dir = os.path.join(input_manager.get_script_dir(), project_name)
     
-    # Build project structure and exit if validations fail
-    if not UnrealEngineManager.build_project_structure(project_name, project_dir, unreal_engine_path, engine_version):
+    ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)
+    
+    if not ue_manager.engine_version or not UnrealEngineManager.is_supported_engine_version(ue_manager.engine_version):
+        print(f"❌ Error: Unreal Engine version {ue_manager.engine_version} is not supported. Supported versions: 5.3.")
+        exit(1)
+        
+    if not ue_manager.build_project_structure():
         print("Exiting execution due to invalid project name or existing project directory.")
         exit(1)
     
     plugin_name = FileUtilityManager.trim_unique_str(FileUtilityManager.generate_unique_str())
-    UnrealEngineManager.create_content_only_plugin(project_dir, plugin_name)
-    
-    UnrealEngineManager.update_ini_files(project_dir, plugin_name, convai_api_key)
+    ue_manager.create_content_only_plugin(plugin_name)
+    ue_manager.update_ini_files(plugin_name, convai_api_key)
     
     DownloadManager.download_modding_dependencies(project_dir)
     
-    UnrealEngineManager.enable_plugins(project_dir, project_name, ["ConvAI", "ConvaiHTTP", "ConvaiPakManager", "JsonBlueprintUtilities", plugin_name])
+    ue_manager.enable_plugins(["ConvAI", "ConvaiHTTP", "ConvaiPakManager", "JsonBlueprintUtilities", plugin_name])
     
     FileUtilityManager.save_metadata(project_dir, {"project_name": project_name,"plugin_name": plugin_name,"asset_type": asset_type, "is_metahuman": is_metahuman})
     
-    UnrealEngineManager.configure_assets_in_project(project_dir, asset_type, is_metahuman)
-    UnrealEngineManager.run_unreal_build(unreal_engine_path, project_name, project_dir)
+    ue_manager.configure_assets_in_project(asset_type, is_metahuman)
+    ue_manager.run_unreal_build()
 
 def UpdateModdingProject():
     """Main execution flow for updating an existing Unreal Engine modding project."""
     
+    ue_dir = input_manager.get_unreal_engine_path()
     project_dir = input_manager.choose_project_dir()
-    unreal_engine_path = input_manager.get_unreal_engine_path()
-    
-    engine_version = UnrealEngineManager.extract_engine_version(unreal_engine_path)        
-    if not engine_version or not UnrealEngineManager.is_supported_engine_version(engine_version):
-        print(f"❌ Error: Unreal Engine version {engine_version} is not supported. Supported versions: 5.3.")
-        exit(1)
 
     metadata = FileUtilityManager.get_metadata(project_dir)        
     asset_type = metadata.get("asset_type")
     is_metahuman = metadata.get("is_metahuman")
     project_name = metadata.get("project_name")
     
-    UnrealEngineManager.update_modding_dependencies(project_dir)
-    UnrealEngineManager.configure_assets_in_project(project_dir, asset_type, is_metahuman)
-    UnrealEngineManager.run_unreal_build(unreal_engine_path, project_name, project_dir)
+    ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)
+    
+    if not ue_manager.engine_version or not UnrealEngineManager.is_supported_engine_version(ue_manager.engine_version):
+        print(f"❌ Error: Unreal Engine version {ue_manager.engine_version} is not supported. Supported versions: 5.3.")
+        exit(1)
+    
+    ue_manager.update_modding_dependencies()
+    ue_manager.configure_assets_in_project(asset_type, is_metahuman)
+    ue_manager.run_unreal_build()
 
 def main():
     print("Welcome to the Convai Modding Tool!")

@@ -12,6 +12,12 @@ class UnrealEngineManager:
     """
     Manages Unreal Engine operations: project setup, building, plugins, and INI configuration.
     """
+    def __init__(self, ue_dir: str, project_name: str = None, project_dir: str = None):
+        self.ue_dir = ue_dir
+        self.project_name = project_name
+        self.project_dir = project_dir
+        self.engine_version = UnrealEngineManager.extract_engine_version(ue_dir)
+    
     @staticmethod
     def extract_engine_version(installation_dir: str) -> str:
         """
@@ -57,29 +63,28 @@ class UnrealEngineManager:
         ver = UnrealEngineManager.extract_engine_version(str(path))
         return bool(ver and UnrealEngineManager.is_supported_engine_version(ver))
 
-    @staticmethod
-    def build_project_structure(
-        project_name: str,
-        project_dir: str,
-        ue_path: str,
-        engine_version: str,
-    ) -> bool:
-        if len(project_name) > 20:
+    def build_project_structure(self) -> bool:
+        """
+        Creates a new Unreal Engine project based on the TP_Blank template.
+        """
+        if not all([self.ue_dir, self.project_name, self.project_dir, self.engine_version]):
+            raise ValueError("UnrealEngineManager not fully initialized.")
+        if len(self.project_name) > 20:
             print("Error: Project name exceeds 20 characters.")
             return False
-        if os.path.exists(project_dir):
-            print(f"Error: Directory exists: {project_dir}")
+        if os.path.exists(self.project_dir):
+            print(f"Error: Directory exists: {self.project_dir}")
             return False
 
-        template = os.path.join(ue_path, "Templates", "TP_Blank")
-        shutil.copytree(template, project_dir)
-        os.makedirs(os.path.join(project_dir, 'Content'), exist_ok=True)
-        FileUtilityManager.update_directory_structure(project_dir, "TP_Blank", project_name)
-        UnrealEngineManager.set_engine_version(
-            os.path.join(project_dir, f"{project_name}.uproject"),
-            engine_version,
+        template = os.path.join(self.ue_dir, "Templates", "TP_Blank")
+        shutil.copytree(template, self.project_dir)
+        os.makedirs(os.path.join(self.project_dir, 'Content'), exist_ok=True)
+        FileUtilityManager.update_directory_structure(self.project_dir, "TP_Blank", self.project_name)
+        self.set_engine_version(
+            os.path.join(self.project_dir, f"{self.project_name}.uproject"),
+            self.engine_version
         )
-        print(f"Created project '{project_name}' at {project_dir}")
+        print(f"Created project '{self.project_name}' at {self.project_dir}")
         return True
 
     @staticmethod
@@ -93,44 +98,34 @@ class UnrealEngineManager:
         except Exception as e:
             print(f"Error updating .uproject: {e}")
 
-    @staticmethod
-    def run_unreal_build(
-        ue_dir: str,
-        project_name: str,
-        project_dir: str,
-    ) -> None:
+    def run_unreal_build(self) -> None:
         ubt = os.path.join(
-            ue_dir,
-            "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe",
+            self.ue_dir,
+            "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"
         )
         if not os.path.exists(ubt):
             print(f"Error: UBT not found: {ubt}")
             return
         cmd = [
             ubt,
-            f"-Project={project_dir}/{project_name}.uproject",
-            f"-Target={project_name}Editor",
+            f"-Project={self.project_dir}/{self.project_name}.uproject",
+            f"-Target={self.project_name}Editor",
             "Win64",
             "Development",
             "-Progress",
             "-NoHotReload",
         ]
         print("Building Unreal project...")
-        res = subprocess.run(cmd, shell=True)
-        if res.returncode != 0:
+        result = subprocess.run(cmd, shell=True)
+        if result.returncode != 0:
             print("Compilation failed.")
         else:
             print("Compilation succeeded.")
 
-    @staticmethod
-    def enable_plugins(
-        project_dir: str,
-        project_name: str,
-        plugins: list[str],
-    ) -> None:
-        path = os.path.join(project_dir, f"{project_name}.uproject")
-        for p in plugins:
-            UnrealEngineManager._enable_plugin(path, p)
+    def enable_plugins(self, plugins: list[str]) -> None:
+        uproject_path = os.path.join(self.project_dir, f"{self.project_name}.uproject")
+        for plugin in plugins:
+            self._enable_plugin(uproject_path, plugin)
 
     @staticmethod
     def _enable_plugin(
@@ -154,15 +149,11 @@ class UnrealEngineManager:
         except:
             return False
 
-    @staticmethod
-    def create_content_only_plugin(
-        project_dir: str,
-        plugin_name: str,
-    ) -> None:
-        plugin_dir = Path(project_dir) / 'Plugins' / plugin_name
-        content = plugin_dir / 'Content'
-        os.makedirs(content, exist_ok=True)
-        up = plugin_dir / f"{plugin_name}.uplugin"
+    def create_content_only_plugin(self, plugin_name: str) -> None:
+        plugin_dir = Path(self.project_dir) / 'Plugins' / plugin_name
+        content_dir = plugin_dir / 'Content'
+        os.makedirs(content_dir, exist_ok=True)
+        up_file = plugin_dir / f"{plugin_name}.uplugin"
         data = {
             'FileVersion': 3,
             'Version': 1,
@@ -174,18 +165,13 @@ class UnrealEngineManager:
             'CanContainContent': True,
             'Installed': False,
         }
-        with open(up, 'w', encoding='utf-8') as f:
+        with open(up_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
 
-    @staticmethod
-    def update_ini_files(
-        project_dir: str,
-        plugin_name: str,
-        api_key: str,
-    ) -> None:
-        UnrealEngineManager._update_game_ini(project_dir, plugin_name)
-        UnrealEngineManager._update_engine_ini(project_dir, api_key)
-        UnrealEngineManager._update_input_ini(project_dir)
+    def update_ini_files(self, plugin_name: str, api_key: str) -> None:
+        self._update_game_ini(self.project_dir, plugin_name)
+        self._update_engine_ini(self.project_dir, api_key)
+        self._update_input_ini(self.project_dir)
 
     @staticmethod
     def _update_game_ini(project_dir, plugin_name):
@@ -373,34 +359,33 @@ DefaultTouchInterface=/Engine/MobileResources/HUD/DefaultVirtualJoysticks.Defaul
         with open(default_input_ini_path, "w", encoding="utf-8") as file:
             file.write(content_to_write.strip() + "\n")
 
-    @staticmethod
-    def update_modding_dependencies(project_dir):
+    def update_modding_dependencies(self) -> None:
         paths_to_delete = [
-            os.path.join(project_dir, "Plugins", "Convai"),
-            os.path.join(project_dir, "Plugins", "ConvaiHTTP"),
-            os.path.join(project_dir, "Plugins", "ConvaiPakManager"),
-            os.path.join(project_dir, "Content", "ConvaiConveniencePack"),
+            os.path.join(self.project_dir, "Plugins", "Convai"),
+            os.path.join(self.project_dir, "Plugins", "ConvaiHTTP"),
+            os.path.join(self.project_dir, "Plugins", "ConvaiPakManager"),
+            os.path.join(self.project_dir, "Content", "ConvaiConveniencePack"),
         ]
-        
-        zip_files = []
-        for filename in os.listdir(os.path.join(project_dir, "ConvaiEssentials")):
-            if filename.lower().endswith(".zip"):
-                zip_files.append(os.path.join(os.path.join(project_dir, "ConvaiEssentials"), filename))
+        zip_dir = os.path.join(self.project_dir, "ConvaiEssentials")
+        zip_files = [os.path.join(zip_dir, f) for f in os.listdir(zip_dir) if f.lower().endswith(".zip")]
 
         FileUtilityManager.delete_paths(paths_to_delete)
         FileUtilityManager.delete_paths(zip_files)
-        
-        DownloadManager.download_modding_dependencies(project_dir)
+        DownloadManager.download_modding_dependencies(self.project_dir)
     
-    @staticmethod
-    def configure_assets_in_project(project_dir, asset_type, is_metahuman):
-        
-        source = os.path.join(project_dir, "Plugins", "ConvaiPakManager", "Content", "Editor", "AssetUploader.uasset")
-        destination = os.path.join(project_dir, "Content", "Editor")
+    def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
+        source = os.path.join(
+            self.project_dir,
+            "Plugins",
+            "ConvaiPakManager",
+            "Content",
+            "Editor",
+            "AssetUploader.uasset"
+        )
+        destination = os.path.join(self.project_dir, "Content", "Editor")
         FileUtilityManager.copy_file_to_directory(source, destination)
-        
+
         if asset_type == "Scene" and not is_metahuman:
-            FileUtilityManager.remove_metahuman_folder(project_dir)       
-        
-        if not is_metahuman and asset_type == "Avatar":
-            DownloadManager.download_convai_realusion_content(project_dir)
+            FileUtilityManager.remove_metahuman_folder(self.project_dir)
+        if asset_type == "Avatar" and not is_metahuman:
+            DownloadManager.download_convai_realusion_content(self.project_dir)
