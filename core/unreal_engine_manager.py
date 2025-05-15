@@ -125,6 +125,7 @@ class UnrealEngineManager:
             FileUtilityManager.remove_metahuman_folder(self.project_dir)
         if asset_type == "Avatar" and not is_metahuman:
             DownloadManager.download_convai_realusion_content(self.project_dir)
+            FileUtilityManager.remove_metahuman_folder(self.project_dir)
     
     def can_create_modding_project(self) -> None:
         """
