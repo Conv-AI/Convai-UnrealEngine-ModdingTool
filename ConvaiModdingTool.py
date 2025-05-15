@@ -25,14 +25,14 @@ def CreateModdingProject():
     
     ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)    
     if not ue_manager.can_create_modding_project():
-        exit(1)
+        return
     
     convai_api_key = input_manager.get_api_key()
     asset_type, is_metahuman = input_manager.get_asset_type()
     
     if not ue_manager.build_project_structure():
-        print("Exiting execution due to invalid project name or existing project directory.")
-        exit(1)
+        print("Build project structure failed")
+        return
     
     plugin_name = FileUtilityManager.trim_unique_str(FileUtilityManager.generate_unique_str())
     ue_manager.create_content_only_plugin(plugin_name)
@@ -61,7 +61,7 @@ def UpdateModdingProject():
     ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)
     
     if not ue_manager.can_create_modding_project():
-        exit(1)
+        return
     
     ue_manager.update_modding_dependencies()
     ue_manager.configure_assets_in_project(asset_type, is_metahuman)
