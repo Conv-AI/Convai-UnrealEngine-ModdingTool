@@ -1,6 +1,7 @@
 import os
 import msvcrt
 from pathlib import Path
+import re
 
 from core.unreal_engine_manager import UnrealEngineManager
 
@@ -82,13 +83,40 @@ class InputManager:
     def get_project_name(self) -> str:
         if self.project_name:
             return self.project_name
+        
         root = self.script_dir
+        name_pattern = re.compile(r"^[a-zA-Z0-9_]{1,20}$")  
+
         while True:
-            name = input('Enter the Project Name: ').strip()
-            if name and not name[0].isdigit() and not (root / name).exists():
-                self.project_name = name
-                return name
-            print('Enter a valid project name')
+            name = input('Enter the Project Name : ').strip()
+            
+            # Check if the name is empty
+            if not name:
+                print("Error: Project name cannot be empty. Please enter a valid project name.")
+                continue
+            
+            # Check if the name exceeds 20 characters
+            if len(name) > 20:
+                print("Error: Project name must not exceed 20 characters. Please try again.")
+                continue
+            
+            # Check if the name starts with a digit
+            if name[0].isdigit():
+                print("Error: Project name cannot start with a digit. Please try again.")
+                continue
+            
+            # Check for invalid characters (only letters, digits, and underscores allowed)
+            if not name_pattern.match(name):
+                print("Error: Project name can only contain letters, digits, and underscores (no spaces or special characters).")
+                continue
+            
+            # Check if the project name already exists
+            if (root / name).exists():
+                print(f"Error: A project named '{name}' already exists. Please choose a different name.")
+                continue
+            
+            self.project_name = name
+            return name
 
     def get_api_key(self) -> str:
         if self.convai_api_key:
