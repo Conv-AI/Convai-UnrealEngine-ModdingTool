@@ -44,7 +44,13 @@ def CreateModdingProject():
     required_plugins = config.get_required_plugins() + [plugin_name]
     ue_manager.enable_plugins(required_plugins)
     
-    FileUtilityManager.save_metadata(project_dir, {"project_name": project_name,"plugin_name": plugin_name,"asset_type": asset_type, "is_metahuman": is_metahuman})
+    FileUtilityManager.save_metadata(project_dir, {
+        "project_name": project_name,
+        "plugin_name": plugin_name,
+        "asset_type": asset_type, 
+        "is_metahuman": is_metahuman,
+        "api_key": convai_api_key
+    })
     
     ue_manager.configure_assets_in_project(asset_type, is_metahuman)
     ue_manager.run_unreal_build()
