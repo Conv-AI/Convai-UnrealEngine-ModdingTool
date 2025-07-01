@@ -18,6 +18,12 @@ class ConfigManager:
             "toolchain_version": "v23_clang-18.1.0-rockylinux8",
             "environment_variable": "LINUX_MULTIARCH_ROOT"
         },
+        "github": {
+            "convai_plugin": {
+                "repo": "Conv-AI/Convai-UnrealEngine-SDK",
+                "asset_patterns": [".zip", "plugin", "unreal", "ue"]
+            }
+        },
         "google_drive": {
             "convai_pak_manager_plugin": "1Cioj7IhSV3s-bBHiFbgfcFyUIIsvHyfe",
             "convai_convenience_pack": "1y2lkBFo7ebRFt8SIiV9ME1mmRwgpnM3h",
@@ -81,6 +87,14 @@ class ConfigManager:
     def get_google_drive_id(self, resource_name: str) -> str:
         """Get Google Drive file ID for a specific resource."""
         return self.get(f'google_drive.{resource_name}', '')
+    
+    def get_github_repo(self, plugin_name: str) -> str:
+        """Get GitHub repository for a specific plugin."""
+        return self.get(f'github.{plugin_name}.repo', '')
+    
+    def get_github_asset_patterns(self, plugin_name: str) -> List[str]:
+        """Get GitHub asset patterns for a specific plugin."""
+        return self.get(f'github.{plugin_name}.asset_patterns', ['.zip'])
     
     def get_required_plugins(self) -> List[str]:
         """Get list of required plugins."""

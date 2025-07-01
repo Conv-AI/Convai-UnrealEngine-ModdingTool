@@ -4,9 +4,12 @@ import shutil
 import requests
 import time
 import gdown
+import json
+import re
 
 from core.config_manager import config
 from core.file_utility_manager import FileUtilityManager
+from core.github_manager import GitHubManager
 
 class DownloadManager:
     
@@ -203,12 +206,218 @@ class DownloadManager:
             return None
 
     @staticmethod
+    def _find_convai_plugin_directory(project_dir: str) -> str:
+        """
+        Find the Convai plugin directory in the project plugins folder.
+        
+        Args:
+            project_dir: Project directory path
+            
+        Returns:
+            Path to Convai plugin directory or None if not found
+        """
+        plugins_dir = os.path.join(project_dir, "Plugins")
+        
+        if not os.path.exists(plugins_dir):
+            return None
+        
+        # Look for ConvAI plugin directory (case variations)
+        for item in os.listdir(plugins_dir):
+            item_path = os.path.join(plugins_dir, item)
+            if os.path.isdir(item_path):
+                # Check if this directory contains ConvAI.uplugin
+                uplugin_file = os.path.join(item_path, "ConvAI.uplugin")
+                if os.path.exists(uplugin_file):
+                    return item_path
+        
+        return None
+
+    @staticmethod
+    def _remove_engine_version_from_uplugin(uplugin_file_path: str) -> bool:
+        """
+        Remove EngineVersion key from ConvAI.uplugin file.
+        
+        Args:
+            uplugin_file_path: Path to the ConvAI.uplugin file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            print(f"🔧 Removing EngineVersion from {uplugin_file_path}")
+            
+            # Read the JSON file
+            with open(uplugin_file_path, 'r', encoding='utf-8') as f:
+                plugin_data = json.load(f)
+            
+            # Remove EngineVersion if it exists
+            if 'EngineVersion' in plugin_data:
+                del plugin_data['EngineVersion']
+                print("✅ Removed EngineVersion key")
+            else:
+                print("ℹ️ EngineVersion key not found (already removed)")
+            
+            # Write back the modified JSON
+            with open(uplugin_file_path, 'w', encoding='utf-8') as f:
+                json.dump(plugin_data, f, indent=4)
+            
+            return True
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ Error: Invalid JSON in uplugin file: {e}")
+            return False
+        except Exception as e:
+            print(f"❌ Error modifying uplugin file: {e}")
+            return False
+
+    @staticmethod
+    def _update_convai_build_file(build_file_path: str) -> bool:
+        """
+        Update Convai.Build.cs to set bEnableConvaiHTTP = true.
+        
+        Args:
+            build_file_path: Path to the Convai.Build.cs file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            print(f"🔧 Updating bEnableConvaiHTTP in {build_file_path}")
+            
+            # Read the build file
+            with open(build_file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Pattern to match: const bool bEnableConvaiHTTP = false; (or true)
+            pattern = r'const\s+bool\s+bEnableConvaiHTTP\s*=\s*(true|false)\s*;'
+            replacement = 'const bool bEnableConvaiHTTP = true;'
+            
+            # Check if the pattern exists
+            if re.search(pattern, content):
+                # Replace the value
+                new_content = re.sub(pattern, replacement, content)
+                
+                # Write back the modified content
+                with open(build_file_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                
+                print("✅ Set bEnableConvaiHTTP = true")
+                return True
+            else:
+                print("⚠️ Warning: bEnableConvaiHTTP declaration not found in build file")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error modifying build file: {e}")
+            return False
+
+    @staticmethod
+    def _post_process_convai_plugin(project_dir: str) -> bool:
+        """
+        Post-process the Convai plugin after extraction.
+        
+        Args:
+            project_dir: Project directory path
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        print("🔄 Post-processing Convai plugin...")
+        
+        # Find Convai plugin directory
+        convai_plugin_dir = DownloadManager._find_convai_plugin_directory(project_dir)
+        if not convai_plugin_dir:
+            print("❌ Error: Could not find Convai plugin directory")
+            return False
+        
+        print(f"📁 Found Convai plugin at: {convai_plugin_dir}")
+        
+        # 1. Remove EngineVersion from ConvAI.uplugin
+        uplugin_file = os.path.join(convai_plugin_dir, "ConvAI.uplugin")
+        if os.path.exists(uplugin_file):
+            if not DownloadManager._remove_engine_version_from_uplugin(uplugin_file):
+                print("⚠️ Warning: Failed to modify uplugin file")
+        else:
+            print(f"⚠️ Warning: ConvAI.uplugin not found at {uplugin_file}")
+        
+        # 2. Update Convai.Build.cs
+        build_file = os.path.join(convai_plugin_dir, "Source", "Convai", "Convai.Build.cs")
+        if os.path.exists(build_file):
+            if not DownloadManager._update_convai_build_file(build_file):
+                print("⚠️ Warning: Failed to modify build file")
+        else:
+            print(f"⚠️ Warning: Convai.Build.cs not found at {build_file}")
+        
+        print("✅ Convai plugin post-processing completed")
+        return True
+
+    @staticmethod
+    def download_convai_plugin_from_github(project_dir: str, version: str = None) -> bool:
+        """
+        Download Convai plugin from GitHub release.
+        
+        Args:
+            project_dir: Project directory path
+            version: Specific version to download, or None for latest
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            github_manager = GitHubManager()
+            download_dir = os.path.join(project_dir, "ConvaiEssentials")
+            
+            repo = config.get_github_repo("convai_plugin")
+            asset_patterns = config.get_github_asset_patterns("convai_plugin")
+            
+            if not repo:
+                print("❌ Error: Convai GitHub repository not configured")
+                return False
+            
+            print(f"📦 Downloading Convai plugin from GitHub: {repo}")
+            
+            # Download plugin from GitHub
+            downloaded_file = github_manager.download_plugin_from_release(
+                repo=repo,
+                download_dir=download_dir,
+                version=version,
+                asset_patterns=asset_patterns
+            )
+            
+            if not downloaded_file:
+                print("❌ Error: Failed to download Convai plugin from GitHub")
+                return False
+            
+            # Extract plugin to project
+            extracted_path = DownloadManager.extract_plugin_zip(downloaded_file, project_dir)
+            if not extracted_path:
+                print("❌ Error: Failed to extract Convai plugin")
+                return False
+            
+            # Post-process the plugin (remove EngineVersion, update build settings)
+            if not DownloadManager._post_process_convai_plugin(project_dir):
+                print("⚠️ Warning: Post-processing failed, but plugin was installed")
+            
+            print(f"✅ Successfully downloaded, installed, and configured Convai plugin from GitHub")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error downloading Convai plugin from GitHub: {e}")
+            return False
+
+    @staticmethod
     def download_modding_dependencies(project_dir):
+        #Download Convai plugin from GitHub
+        convai_success = DownloadManager.download_convai_plugin_from_github(project_dir)
+        if not convai_success:
+            print("⚠️ Warning: Failed to download Convai plugin from GitHub, falling back to Google Drive")
+            # Fallback: could implement Google Drive download for Convai if needed
+        
         #CC pak
         DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_convenience_pack"), os.path.join(project_dir, "ConvaiEssentials"), "ConvaiConveniencePack.zip")
         FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiConveniencePack.zip"), os.path.join(project_dir, "Content"))
         
-        #Necessary plugins
+        #Other necessary plugins (still from Google Drive)
         DownloadManager.download_plugins_from_gdrive_folder(config.get_google_drive_id("plugins_folder"), project_dir)
 
     @staticmethod
