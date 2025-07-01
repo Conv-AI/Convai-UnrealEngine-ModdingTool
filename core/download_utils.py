@@ -273,7 +273,7 @@ class DownloadManager:
     @staticmethod
     def _update_convai_build_file(build_file_path: str) -> bool:
         """
-        Update Convai.Build.cs to set bEnableConvaiHTTP = true.
+        Update Convai.Build.cs to set bEnableConvaiHTTP = true and bUsePrecompiled = false.
         
         Args:
             build_file_path: Path to the Convai.Build.cs file
@@ -282,29 +282,43 @@ class DownloadManager:
             True if successful, False otherwise
         """
         try:
-            print(f"🔧 Updating bEnableConvaiHTTP in {build_file_path}")
+            print(f"🔧 Updating build settings in {build_file_path}")
             
             # Read the build file
             with open(build_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Pattern to match: const bool bEnableConvaiHTTP = false; (or true)
-            pattern = r'const\s+bool\s+bEnableConvaiHTTP\s*=\s*(true|false)\s*;'
-            replacement = 'const bool bEnableConvaiHTTP = true;'
+            modified = False
             
-            # Check if the pattern exists
-            if re.search(pattern, content):
-                # Replace the value
-                new_content = re.sub(pattern, replacement, content)
-                
-                # Write back the modified content
-                with open(build_file_path, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
-                
+            # 1. Update bEnableConvaiHTTP = true
+            pattern_convai_http = r'const\s+bool\s+bEnableConvaiHTTP\s*=\s*(true|false)\s*;'
+            replacement_convai_http = 'const bool bEnableConvaiHTTP = true;'
+            
+            if re.search(pattern_convai_http, content):
+                content = re.sub(pattern_convai_http, replacement_convai_http, content)
                 print("✅ Set bEnableConvaiHTTP = true")
-                return True
+                modified = True
             else:
                 print("⚠️ Warning: bEnableConvaiHTTP declaration not found in build file")
+            
+            # 2. Update bUsePrecompiled = false
+            pattern_precompiled = r'bUsePrecompiled\s*=\s*(true|false)\s*;'
+            replacement_precompiled = 'bUsePrecompiled = false;'
+            
+            if re.search(pattern_precompiled, content):
+                content = re.sub(pattern_precompiled, replacement_precompiled, content)
+                print("✅ Set bUsePrecompiled = false")
+                modified = True
+            else:
+                print("⚠️ Warning: bUsePrecompiled assignment not found in build file")
+            
+            # Write back the modified content if any changes were made
+            if modified:
+                with open(build_file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                return True
+            else:
+                print("⚠️ Warning: No build settings were modified")
                 return False
                 
         except Exception as e:
