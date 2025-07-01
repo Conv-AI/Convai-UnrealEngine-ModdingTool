@@ -366,12 +366,13 @@ class DownloadManager:
         return True
 
     @staticmethod
-    def download_convai_plugin_from_github(project_dir: str, version: str = None) -> bool:
+    def download_plugin_from_github(project_dir: str, plugin_name: str, version: str = None) -> bool:
         """
-        Download Convai plugin from GitHub release.
+        Generic function to download any plugin from GitHub release.
         
         Args:
             project_dir: Project directory path
+            plugin_name: Plugin configuration name (e.g., 'convai_plugin', 'convai_http_plugin')
             version: Specific version to download, or None for latest
             
         Returns:
@@ -381,14 +382,15 @@ class DownloadManager:
             github_manager = GitHubManager()
             download_dir = os.path.join(project_dir, "ConvaiEssentials")
             
-            repo = config.get_github_repo("convai_plugin")
-            asset_patterns = config.get_github_asset_patterns("convai_plugin")
+            repo = config.get_github_repo(plugin_name)
+            asset_patterns = config.get_github_asset_patterns(plugin_name)
+            needs_post_process = config.get_github_post_process(plugin_name)
             
             if not repo:
-                print("❌ Error: Convai GitHub repository not configured")
+                print(f"❌ Error: {plugin_name} GitHub repository not configured")
                 return False
             
-            print(f"📦 Downloading Convai plugin from GitHub: {repo}")
+            print(f"📦 Downloading {plugin_name} from GitHub: {repo}")
             
             # Download plugin from GitHub
             downloaded_file = github_manager.download_plugin_from_release(
@@ -399,39 +401,51 @@ class DownloadManager:
             )
             
             if not downloaded_file:
-                print("❌ Error: Failed to download Convai plugin from GitHub")
+                print(f"❌ Error: Failed to download {plugin_name} from GitHub")
                 return False
             
             # Extract plugin to project
             extracted_path = DownloadManager.extract_plugin_zip(downloaded_file, project_dir)
             if not extracted_path:
-                print("❌ Error: Failed to extract Convai plugin")
+                print(f"❌ Error: Failed to extract {plugin_name}")
                 return False
             
-            # Post-process the plugin (remove EngineVersion, update build settings)
-            if not DownloadManager._post_process_convai_plugin(project_dir):
-                print("⚠️ Warning: Post-processing failed, but plugin was installed")
+            # Post-process if needed (Convai-specific modifications)
+            if needs_post_process and plugin_name == "convai_plugin":
+                if not DownloadManager._post_process_convai_plugin(project_dir):
+                    print("⚠️ Warning: Post-processing failed, but plugin was installed")
             
-            print(f"✅ Successfully downloaded, installed, and configured Convai plugin from GitHub")
+            print(f"✅ Successfully downloaded and installed {plugin_name} from GitHub")
             return True
             
         except Exception as e:
-            print(f"❌ Error downloading Convai plugin from GitHub: {e}")
+            print(f"❌ Error downloading {plugin_name} from GitHub: {e}")
             return False
 
     @staticmethod
     def download_modding_dependencies(project_dir):
-        #Download Convai plugin from GitHub
-        convai_success = DownloadManager.download_convai_plugin_from_github(project_dir)
-        if not convai_success:
-            print("⚠️ Warning: Failed to download Convai plugin from GitHub, falling back to Google Drive")
-            # Fallback: could implement Google Drive download for Convai if needed
+        """Download all configured plugins from GitHub and Google Drive."""
         
-        #CC pak
+        # Download all configured GitHub plugins
+        github_plugins = config.get_github_plugins()
+        github_success = True
+        
+        for plugin_name in github_plugins:
+            print(f"📦 Downloading {plugin_name} from GitHub...")
+            if not DownloadManager.download_plugin_from_github(project_dir, plugin_name):
+                print(f"⚠️ Warning: Failed to download {plugin_name} from GitHub")
+                github_success = False
+        
+        if github_success and github_plugins:
+            print(f"✅ Successfully downloaded {len(github_plugins)} plugins from GitHub")
+        
+        # Download Google Drive content
+        print("📦 Downloading ConvaiConveniencePack from Google Drive...")
         DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_convenience_pack"), os.path.join(project_dir, "ConvaiEssentials"), "ConvaiConveniencePack.zip")
         FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiConveniencePack.zip"), os.path.join(project_dir, "Content"))
         
-        #Other necessary plugins (still from Google Drive)
+        # Download other necessary plugins (still from Google Drive)
+        print("📦 Downloading additional plugins from Google Drive...")
         DownloadManager.download_plugins_from_gdrive_folder(config.get_google_drive_id("plugins_folder"), project_dir)
 
     @staticmethod

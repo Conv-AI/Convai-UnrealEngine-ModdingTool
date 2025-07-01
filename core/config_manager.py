@@ -21,7 +21,13 @@ class ConfigManager:
         "github": {
             "convai_plugin": {
                 "repo": "Conv-AI/Convai-UnrealEngine-SDK",
-                "asset_patterns": [".zip", "plugin", "unreal", "ue"]
+                "asset_patterns": [".zip", "plugin", "unreal", "ue"],
+                "post_process": True
+            },
+            "convai_http_plugin": {
+                "repo": "Conv-AI/Convai-UnrealEngine-HTTP",
+                "asset_patterns": [".zip", "plugin", "unreal", "ue"],
+                "post_process": False
             }
         },
         "google_drive": {
@@ -95,6 +101,15 @@ class ConfigManager:
     def get_github_asset_patterns(self, plugin_name: str) -> List[str]:
         """Get GitHub asset patterns for a specific plugin."""
         return self.get(f'github.{plugin_name}.asset_patterns', ['.zip'])
+    
+    def get_github_post_process(self, plugin_name: str) -> bool:
+        """Get whether a plugin needs post-processing after download."""
+        return self.get(f'github.{plugin_name}.post_process', False)
+    
+    def get_github_plugins(self) -> List[str]:
+        """Get list of all GitHub plugins configured."""
+        github_config = self.get('github', {})
+        return list(github_config.keys())
     
     def get_required_plugins(self) -> List[str]:
         """Get list of required plugins."""
