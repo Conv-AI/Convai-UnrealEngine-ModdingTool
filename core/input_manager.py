@@ -3,6 +3,7 @@ import msvcrt
 from pathlib import Path
 import re
 
+from core.config_manager import config
 from core.unreal_engine_manager import UnrealEngineManager
 
 class InputManager:
@@ -72,13 +73,14 @@ class InputManager:
                     self.unreal_engine_path = str(path_obj)
                     return self.unreal_engine_path
         while True:
-            user_input = input('Enter the Unreal Engine 5.3 installation directory: ').strip()
+            current_version = config.get_unreal_engine_version()
+            user_input = input(f'Enter the Unreal Engine {current_version} installation directory: ').strip()
             engine_path = Path(user_input)
             if UnrealEngineManager.is_valid_engine_path(engine_path):
                 print(f'Using Unreal Engine path: {engine_path}')
                 self.unreal_engine_path = str(engine_path)
                 return self.unreal_engine_path
-            print('Invalid path. Please enter a valid Unreal Engine 5.3 directory.')
+            print(f'Invalid path. Please enter a valid Unreal Engine {current_version} directory.')
 
     def get_project_name(self) -> str:
         if self.project_name:
@@ -95,9 +97,10 @@ class InputManager:
                 print("Error: Project name cannot be empty. Please enter a valid project name.")
                 continue
             
-            # Check if the name exceeds 20 characters
-            if len(name) > 20:
-                print("Error: Project name must not exceed 20 characters. Please try again.")
+            # Check if the name exceeds maximum length
+            max_length = config.get_max_project_name_length()
+            if len(name) > max_length:
+                print(f"Error: Project name must not exceed {max_length} characters. Please try again.")
                 continue
             
             # Check if the name starts with a digit

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from core.config_manager import config
 from core.download_utils import DownloadManager
 from core.file_utility_manager import FileUtilityManager
 
@@ -135,15 +136,17 @@ class UnrealEngineManager:
         """
         # Engine version check
         if not self.engine_version or not UnrealEngineManager.is_supported_engine_version(self.engine_version):
-            print(f"❌ Error: Unreal Engine version {self.engine_version} is not supported. Supported versions: 5.3.")
+            supported_versions = ', '.join(config.get_supported_engine_versions())
+            print(f"❌ Error: Unreal Engine version {self.engine_version} is not supported. Supported versions: {supported_versions}.")
             return False
 
         # Cross-compilation toolchain check
-        toolchain_root = os.environ.get("LINUX_MULTIARCH_ROOT")          
-        required_version = "v22_clang-16.0.6-centos7"
+        env_var = config.get_cross_compilation_env_var()
+        toolchain_root = os.environ.get(env_var)          
+        required_version = config.get_cross_compilation_toolchain()
         
         if not toolchain_root:
-            print("❌ Error: LINUX_MULTIARCH_ROOT is not set.")
+            print(f"❌ Error: {env_var} is not set.")
             return False
         
         basename = os.path.basename(toolchain_root.strip("\\/"))        
@@ -193,7 +196,7 @@ class UnrealEngineManager:
 
     @staticmethod
     def is_supported_engine_version(engine_version: str) -> bool:
-        return engine_version in ["5.3"]
+        return engine_version in config.get_supported_engine_versions()
 
     @staticmethod
     def is_valid_engine_path(path: Path) -> bool:

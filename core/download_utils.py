@@ -5,6 +5,7 @@ import requests
 import time
 import gdown
 
+from core.config_manager import config
 from core.file_utility_manager import FileUtilityManager
 
 class DownloadManager:
@@ -75,7 +76,7 @@ class DownloadManager:
     @staticmethod
     def download_and_extract_plugin(project_dir):
         """Download and extract ConvaiPakManager plugin into ProjectDir/Plugins/."""
-        file_id = "1Cioj7IhSV3s-bBHiFbgfcFyUIIsvHyfe"
+        file_id = config.get_google_drive_id("convai_pak_manager_plugin")
         download_dir = os.path.join(project_dir, "ConvaiEssentials")
         filename = "ConvaiPakManagerPlugin.zip"
 
@@ -204,13 +205,13 @@ class DownloadManager:
     @staticmethod
     def download_modding_dependencies(project_dir):
         #CC pak
-        DownloadManager.download_from_gdrive("1y2lkBFo7ebRFt8SIiV9ME1mmRwgpnM3h", os.path.join(project_dir, "ConvaiEssentials"), "ConvaiConveniencePack.zip")
+        DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_convenience_pack"), os.path.join(project_dir, "ConvaiEssentials"), "ConvaiConveniencePack.zip")
         FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiConveniencePack.zip"), os.path.join(project_dir, "Content"))
         
         #Necessary plugins
-        DownloadManager.download_plugins_from_gdrive_folder("11n7EZW4SBd4Ri9Q6GuXFdoLrwCZvnnwq", project_dir)
+        DownloadManager.download_plugins_from_gdrive_folder(config.get_google_drive_id("plugins_folder"), project_dir)
 
     @staticmethod
     def download_convai_realusion_content(project_dir):
-        DownloadManager.download_from_gdrive("1bAatTW4vYycDbGLeO1pGILc3OVOOR3je", os.path.join(project_dir, "ConvaiEssentials"), "ConvaiRealusionContent.zip")
+        DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_reallusion_content"), os.path.join(project_dir, "ConvaiEssentials"), "ConvaiRealusionContent.zip")
         FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiRealusionContent.zip"), os.path.join(project_dir))

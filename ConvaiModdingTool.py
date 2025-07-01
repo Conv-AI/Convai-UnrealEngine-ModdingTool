@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import sys
 
+from core.config_manager import config
 from core.download_utils import DownloadManager
 from core.file_utility_manager import FileUtilityManager
 from core.input_manager import InputManager
@@ -14,7 +15,7 @@ def get_script_dir():
         return Path(__file__).resolve().parent.parent
 
 #Managers
-input_manager = InputManager(get_script_dir(), ["E:/Software/UE_5.3", "D:/Software/UnrealEngine/UE_5.3/UE_5.3", "C:/Program Files/Epic Games/UE_5.3"])
+input_manager = InputManager(get_script_dir(), config.get_default_engine_paths())
 
 def CreateModdingProject():
     """Main execution flow for setting up an Unreal Engine project."""  
@@ -40,7 +41,8 @@ def CreateModdingProject():
     
     DownloadManager.download_modding_dependencies(project_dir)
     
-    ue_manager.enable_plugins(["ConvAI", "ConvaiHTTP", "ConvaiPakManager", "JsonBlueprintUtilities", plugin_name])
+    required_plugins = config.get_required_plugins() + [plugin_name]
+    ue_manager.enable_plugins(required_plugins)
     
     FileUtilityManager.save_metadata(project_dir, {"project_name": project_name,"plugin_name": plugin_name,"asset_type": asset_type, "is_metahuman": is_metahuman})
     
