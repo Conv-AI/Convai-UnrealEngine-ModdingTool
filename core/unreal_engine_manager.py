@@ -8,6 +8,7 @@ from pathlib import Path
 from core.config_manager import config
 from core.download_utils import DownloadManager
 from core.file_utility_manager import FileUtilityManager
+from core.plugin_manager import PluginManager
 
 class UnrealEngineManager:
     """
@@ -112,7 +113,7 @@ class UnrealEngineManager:
     
     def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
         # Find ConvaiPakManager plugin directory dynamically
-        pak_manager_dir = DownloadManager.find_plugin_directory(self.project_dir, "ConvaiPakManager.uplugin")
+        pak_manager_dir = PluginManager.find_plugin_directory(self.project_dir, "ConvaiPakManager.uplugin")
         if not pak_manager_dir:
             print("❌ Error: ConvaiPakManager plugin directory not found")
             return
@@ -127,10 +128,10 @@ class UnrealEngineManager:
         FileUtilityManager.copy_file_to_directory(source, destination)
 
         if asset_type == "Scene" and not is_metahuman:
-            FileUtilityManager.remove_metahuman_folder(self.project_dir)
+            self.remove_metahuman_folder()
         if asset_type == "Avatar" and not is_metahuman:
             DownloadManager.download_convai_realusion_content(self.project_dir)
-            FileUtilityManager.remove_metahuman_folder(self.project_dir)
+            self.remove_metahuman_folder()
     
 
     
@@ -165,6 +166,18 @@ class UnrealEngineManager:
             return False
         
         return True
+    
+    def remove_metahuman_folder(self) -> None:
+        """
+        Deletes the 'MetaHumans' folder under the project directory, if it exists.
+        """
+        plugins_dir = Path(self.project_dir) / "Plugins"
+    
+        for plugin_path in plugins_dir.glob("*/ConvAI.uplugin"):
+            plugin_root = plugin_path.parent  
+            metahuman_dir = plugin_root / "Content" / "MetaHumans"
+            FileUtilityManager.delete_directory_if_exists(metahuman_dir)
+            break 
     
     @staticmethod
     def _extract_engine_version(installation_dir: str) -> str:

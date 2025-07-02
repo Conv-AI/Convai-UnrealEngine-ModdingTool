@@ -87,18 +87,7 @@ class FileUtilityManager:
             except Exception as e:
                 print(f"Failed to delete {directory_path}: {e}")
 
-    @staticmethod
-    def remove_metahuman_folder(project_dir: str) -> None:
-        """
-        Deletes the 'MetaHumans' folder under the given project directory, if it exists.
-        """
-        plugins_dir = Path(project_dir) / "Plugins"
-    
-        for plugin_path in plugins_dir.glob("*/ConvAI.uplugin"):
-            plugin_root = plugin_path.parent  
-            metahuman_dir = plugin_root / "Content" / "MetaHumans"
-            FileUtilityManager.delete_directory_if_exists(metahuman_dir)
-            break 
+ 
     
     @staticmethod 
     def delete_file_if_exists(file_path):
