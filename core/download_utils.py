@@ -4,8 +4,6 @@ import shutil
 import requests
 import time
 import gdown
-import json
-import re
 
 from core.config_manager import config
 from core.file_utility_manager import FileUtilityManager
@@ -205,14 +203,6 @@ class DownloadManager:
         except zipfile.BadZipFile:
             print("Error: The downloaded file is not a valid ZIP archive.")
             return None
-
-
-
-
-
-
-
-
 
     @staticmethod
     def download_plugin_from_github(project_dir: str, plugin_name: str, version: str = None) -> bool:
