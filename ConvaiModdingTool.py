@@ -79,11 +79,15 @@ def UpdateModdingProject():
     asset_type = metadata.get("asset_type")
     is_metahuman = metadata.get("is_metahuman")
     project_name = metadata.get("project_name")
-    
+
     ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)
     
     if not ue_manager.can_create_modding_project():
         return
+    
+    logger.step("Checking project engine version...")
+    if not ue_manager.update_project_engine_version():
+        logger.warning("Failed to update project engine version, but continuing...")
     
     logger.step("Updating Convai dependencies...")
     ue_manager.update_modding_dependencies()

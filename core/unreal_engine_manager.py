@@ -308,6 +308,57 @@ class UnrealEngineManager:
             logger.error(f"Error updating .uproject file: {e}")
 
     @staticmethod
+    def _get_project_engine_version(uproject_file: str) -> str:
+        """
+        Get the current EngineAssociation from a .uproject file.
+        
+        Args:
+            uproject_file: Path to the .uproject file
+            
+        Returns:
+            Engine version string or None if not found or error
+        """
+        try:
+            with open(uproject_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data.get('EngineAssociation')
+        except Exception as e:
+            logger.error(f"Error reading .uproject file: {e}")
+            return None
+
+    def update_project_engine_version(self) -> bool:
+        """
+        Update the project's engine version to match the current engine installation.
+        
+        Returns:
+            True if updated or no update needed, False if error
+        """
+        if not self.project_name or not self.project_dir or not self.engine_version:
+            logger.error("UnrealEngineManager not fully initialized for engine version update")
+            return False
+            
+        uproject_file = os.path.join(self.project_dir, f"{self.project_name}.uproject")
+        if not os.path.exists(uproject_file):
+            logger.error(f"Project file not found: {uproject_file}")
+            return False
+        
+        current_version = self._get_project_engine_version(uproject_file)
+        target_version = self.engine_version
+        
+        if current_version == target_version:
+            logger.debug(f"Project engine version is already up to date ({target_version})")
+            return True
+        
+        if current_version:
+            logger.step(f"Updating project engine version from {current_version} to {target_version}...")
+        else:
+            logger.step(f"Setting project engine version to {target_version}...")
+            
+        self._set_engine_version(uproject_file, target_version)
+        logger.success(f"Updated project to Unreal Engine {target_version}")
+        return True
+
+    @staticmethod
     def _enable_plugin(
         uproject_path: str,
         name: str,
