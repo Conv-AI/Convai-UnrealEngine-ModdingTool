@@ -4,6 +4,7 @@ import re
 from typing import Optional
 
 from core.config_manager import config
+from core.logger import logger
 
 class PluginManager:
     """Manages plugin-specific operations like post-processing and configuration."""
@@ -32,7 +33,7 @@ class PluginManager:
                 uplugin_file = os.path.join(item_path, uplugin_filename)
                 if os.path.exists(uplugin_file):
                     plugin_name = uplugin_filename.replace('.uplugin', '')
-                    print(f"📁 Found {plugin_name} plugin at: {item_path}")
+                    logger.debug(f"Found {plugin_name} plugin directory")
                     return item_path
         
         return None
@@ -49,7 +50,7 @@ class PluginManager:
             True if successful, False otherwise
         """
         try:
-            print(f"🔧 Removing EngineVersion from {uplugin_file_path}")
+            logger.debug(f"Removing EngineVersion from plugin file")
             
             # Read the JSON file
             with open(uplugin_file_path, 'r', encoding='utf-8') as f:
@@ -58,9 +59,9 @@ class PluginManager:
             # Remove EngineVersion if it exists
             if 'EngineVersion' in plugin_data:
                 del plugin_data['EngineVersion']
-                print("✅ Removed EngineVersion key")
+                logger.debug("Removed EngineVersion key")
             else:
-                print("ℹ️ EngineVersion key not found (already removed)")
+                logger.debug("EngineVersion key not found (already removed)")
             
             # Write back the modified JSON
             with open(uplugin_file_path, 'w', encoding='utf-8') as f:
@@ -69,10 +70,10 @@ class PluginManager:
             return True
             
         except json.JSONDecodeError as e:
-            print(f"❌ Error: Invalid JSON in uplugin file: {e}")
+            logger.error(f"Invalid JSON in uplugin file: {e}")
             return False
         except Exception as e:
-            print(f"❌ Error modifying uplugin file: {e}")
+            logger.error(f"Error modifying uplugin file: {e}")
             return False
 
     @staticmethod
@@ -87,7 +88,7 @@ class PluginManager:
             True if successful, False otherwise
         """
         try:
-            print(f"🔧 Updating build settings in {build_file_path}")
+            logger.debug("Updating build file settings")
             
             # Read the build file
             with open(build_file_path, 'r', encoding='utf-8') as f:
@@ -101,10 +102,10 @@ class PluginManager:
             
             if re.search(pattern_convai_http, content):
                 content = re.sub(pattern_convai_http, replacement_convai_http, content)
-                print("✅ Set bEnableConvaiHTTP = true")
+                logger.debug("Set bEnableConvaiHTTP = true")
                 modified = True
             else:
-                print("⚠️ Warning: bEnableConvaiHTTP declaration not found in build file")
+                logger.warning("bEnableConvaiHTTP declaration not found in build file")
             
             # 2. Update bUsePrecompiled = false
             pattern_precompiled = r'bUsePrecompiled\s*=\s*(true|false)\s*;'
@@ -112,10 +113,10 @@ class PluginManager:
             
             if re.search(pattern_precompiled, content):
                 content = re.sub(pattern_precompiled, replacement_precompiled, content)
-                print("✅ Set bUsePrecompiled = false")
+                logger.debug("Set bUsePrecompiled = false")
                 modified = True
             else:
-                print("⚠️ Warning: bUsePrecompiled assignment not found in build file")
+                logger.warning("bUsePrecompiled assignment not found in build file")
             
             # Write back the modified content if any changes were made
             if modified:
@@ -123,11 +124,11 @@ class PluginManager:
                     f.write(content)
                 return True
             else:
-                print("⚠️ Warning: No build settings were modified")
+                logger.warning("No build settings were modified")
                 return False
                 
         except Exception as e:
-            print(f"❌ Error modifying build file: {e}")
+            logger.error(f"Error modifying build file: {e}")
             return False
 
     @staticmethod
@@ -141,32 +142,30 @@ class PluginManager:
         Returns:
             True if successful, False otherwise
         """
-        print("🔄 Post-processing Convai plugin...")
+        logger.debug("Post-processing Convai plugin...")
         
         # Find Convai plugin directory
         convai_plugin_file = config.get_plugin_file_name("convai")
         convai_plugin_dir = PluginManager.find_plugin_directory(project_dir, convai_plugin_file)
         if not convai_plugin_dir:
-            print("❌ Error: Could not find Convai plugin directory")
+            logger.error("Could not find Convai plugin directory")
             return False
-        
-        print(f"📁 Found Convai plugin at: {convai_plugin_dir}")
         
         # 1. Remove EngineVersion from ConvAI.uplugin
         uplugin_file = os.path.join(convai_plugin_dir, convai_plugin_file)
         if os.path.exists(uplugin_file):
             if not PluginManager.remove_engine_version_from_uplugin(uplugin_file):
-                print("⚠️ Warning: Failed to modify uplugin file")
+                logger.warning("Failed to modify uplugin file")
         else:
-            print(f"⚠️ Warning: {convai_plugin_file} not found at {uplugin_file}")
+            logger.warning(f"{convai_plugin_file} not found in plugin directory")
         
         # 2. Update Convai.Build.cs
         build_file = os.path.join(convai_plugin_dir, "Source", "Convai", config.get_build_file_name())
         if os.path.exists(build_file):
             if not PluginManager.update_convai_build_file(build_file):
-                print("⚠️ Warning: Failed to modify build file")
+                logger.warning("Failed to modify build file")
         else:
-            print(f"⚠️ Warning: Convai.Build.cs not found at {build_file}")
+            logger.warning("Convai.Build.cs not found in plugin directory")
         
-        print("✅ Convai plugin post-processing completed")
+        logger.debug("Convai plugin post-processing completed")
         return True 

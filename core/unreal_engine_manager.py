@@ -9,6 +9,7 @@ from core.config_manager import config
 from core.download_utils import DownloadManager
 from core.file_utility_manager import FileUtilityManager
 from core.plugin_manager import PluginManager
+from core.logger import logger
 
 class UnrealEngineManager:
     """
@@ -27,10 +28,10 @@ class UnrealEngineManager:
         if not all([self.ue_dir, self.project_name, self.project_dir, self.engine_version]):
             raise ValueError("UnrealEngineManager not fully initialized.")
         if len(self.project_name) > 20:
-            print("Error: Project name exceeds 20 characters.")
+            logger.error("Project name exceeds 20 characters")
             return False
         if os.path.exists(self.project_dir):
-            print(f"Error: Directory exists: {self.project_dir}")
+            logger.error(f"Directory already exists: {self.project_dir}")
             return False
 
         template = os.path.join(self.ue_dir, "Templates", "TP_Blank")
@@ -41,7 +42,7 @@ class UnrealEngineManager:
             os.path.join(self.project_dir, f"{self.project_name}.uproject"),
             self.engine_version
         )
-        print(f"Created project '{self.project_name}' at {self.project_dir}")
+        logger.success(f"Created project structure for '{self.project_name}'")
         return True
 
     def run_unreal_build(self) -> None:
@@ -50,7 +51,7 @@ class UnrealEngineManager:
             "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"
         )
         if not os.path.exists(ubt):
-            print(f"Error: UBT not found: {ubt}")
+            logger.error(f"UnrealBuildTool not found: {ubt}")
             return
         cmd = [
             ubt,
@@ -61,17 +62,47 @@ class UnrealEngineManager:
             "-Progress",
             "-NoHotReload",
         ]
-        print("Building Unreal project...")
-        result = subprocess.run(cmd, shell=True)
+        logger.info("Starting project compilation...")
+        
+        # Capture output to reduce verbosity
+        result = subprocess.run(
+            cmd, 
+            shell=True, 
+            capture_output=True, 
+            text=True,
+            encoding='utf-8'
+        )
+        
         if result.returncode != 0:
-            print("Compilation failed.")
+            logger.error("Compilation failed")
+            # Show key error information
+            if result.stderr:
+                error_lines = result.stderr.strip().split('\n')
+                # Show only the last few lines of stderr which usually contain the actual error
+                for line in error_lines[-5:]:
+                    if line.strip():
+                        logger.error(line.strip())
         else:
-            print("Compilation succeeded.")
+            logger.success("Compilation completed successfully")
+            # Show any important warnings (but not all the verbose output)
+            if result.stdout:
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    if 'warning' in line.lower() and 'deprecated' not in line.lower():
+                        logger.debug(line.strip())
+                        
+        # Log file information
+        log_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'UnrealBuildTool', 'Log.txt')
+        if os.path.exists(log_file):
+            logger.debug(f"Full build log available at: {log_file}")
 
     def enable_plugins(self, plugins: list[str]) -> None:
         uproject_path = os.path.join(self.project_dir, f"{self.project_name}.uproject")
+        enabled_count = 0
         for plugin in plugins:
-            self._enable_plugin(uproject_path, plugin)
+            if self._enable_plugin(uproject_path, plugin):
+                enabled_count += 1
+        logger.debug(f"Enabled {enabled_count} plugins in project")
 
     def create_content_only_plugin(self, plugin_name: str) -> None:
         plugin_dir = Path(self.project_dir) / 'Plugins' / plugin_name
@@ -91,13 +122,17 @@ class UnrealEngineManager:
         }
         with open(up_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
+        logger.debug(f"Created content plugin: {plugin_name}")
 
     def update_ini_files(self, plugin_name: str, api_key: str) -> None:
+        logger.debug("Updating project configuration files...")
         self._update_game_ini(self.project_dir, plugin_name)
         self._update_engine_ini(self.project_dir, api_key)
         self._update_input_ini(self.project_dir)
 
     def update_modding_dependencies(self) -> None:
+        logger.subsection("Analyzing Current Installation")
+        
         content_dir = os.path.join(self.project_dir, config.get_content_dir_name())
         paths_to_delete = []
         
@@ -108,50 +143,60 @@ class UnrealEngineManager:
             config.get_plugin_file_name("convai_pak_manager")
         ]
         
+        plugin_count = 0
         for plugin_file in convai_plugin_names:
             plugin_dir = PluginManager.find_plugin_directory(self.project_dir, plugin_file)
             if plugin_dir:
                 paths_to_delete.append(plugin_dir)
-                print(f"📁 Found existing plugin to update: {plugin_dir}")
+                plugin_count += 1
         
         # Add content pack directory if it exists
         convenience_pack_dir = os.path.join(content_dir, config.get_convenience_pack_name())
+        content_pack_found = False
         if os.path.exists(convenience_pack_dir):
             paths_to_delete.append(convenience_pack_dir)
-            print(f"📁 Found existing content pack to update: {convenience_pack_dir}")
+            content_pack_found = True
         
         # Get zip files from ConvaiEssentials directory
         zip_dir = os.path.join(self.project_dir, config.get_essentials_dir_name())
         zip_files = []
         if os.path.exists(zip_dir):
             zip_files = [os.path.join(zip_dir, f) for f in os.listdir(zip_dir) if f.lower().endswith(".zip")]
-            if zip_files:
-                print(f"📁 Found {len(zip_files)} zip files to clean up")
+
+        # Log what was found
+        if plugin_count > 0:
+            logger.info(f"Found {plugin_count} existing plugin(s) to update")
+        if content_pack_found:
+            logger.info("Found existing content pack to update")
+        if zip_files:
+            logger.info(f"Found {len(zip_files)} zip file(s) to clean up")
 
         # Delete old installations and download fresh copies
         if paths_to_delete:
-            print(f"🗑️ Removing {len(paths_to_delete)} existing installations...")
+            logger.step(f"Removing {len(paths_to_delete)} existing installation(s)...")
             FileUtilityManager.delete_paths(paths_to_delete)
         
         if zip_files:
-            print("🗑️ Cleaning up old zip files...")
+            logger.step("Cleaning up old zip files...")
             FileUtilityManager.delete_paths(zip_files)
         
-        print("📦 Downloading latest dependencies...")
+        logger.step("Downloading latest dependencies...")
         DownloadManager.download_modding_dependencies(self.project_dir)
     
     def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
+        logger.debug("Configuring project assets...")
+        
         # Find ConvaiPakManager plugin directory dynamically
         pak_manager_dir = PluginManager.find_plugin_directory(self.project_dir, config.get_plugin_file_name("convai_pak_manager"))
         if not pak_manager_dir:
-            print("❌ Error: ConvaiPakManager plugin directory not found")
+            logger.error("ConvaiPakManager plugin directory not found")
             return
         
         source = os.path.join(pak_manager_dir, config.get_content_dir_name(), config.get_editor_dir_name(), config.get_uploader_asset_name())
         destination = os.path.join(self.project_dir, config.get_content_dir_name(), config.get_editor_dir_name())
         
         if not os.path.exists(source):
-            print(f"❌ Error: {config.get_uploader_asset_name()} not found at {source}")
+            logger.error(f"{config.get_uploader_asset_name()} not found at expected location")
             return
             
         FileUtilityManager.copy_file_to_directory(source, destination)
@@ -162,8 +207,6 @@ class UnrealEngineManager:
             DownloadManager.download_convai_realusion_content(self.project_dir)
             self.remove_metahuman_folder()
     
-
-    
     def can_create_modding_project(self) -> None:
         """
         Verifies that all prerequisites for creating a modding project are met.
@@ -173,7 +216,7 @@ class UnrealEngineManager:
         # Engine version check
         if not self.engine_version or not UnrealEngineManager.is_supported_engine_version(self.engine_version):
             supported_versions = ', '.join(config.get_supported_engine_versions())
-            print(f"❌ Error: Unreal Engine version {self.engine_version} is not supported. Supported versions: {supported_versions}.")
+            logger.error(f"Unreal Engine version {self.engine_version} is not supported. Supported versions: {supported_versions}")
             return False
 
         # Cross-compilation toolchain check
@@ -182,16 +225,16 @@ class UnrealEngineManager:
         required_version = config.get_cross_compilation_toolchain()
         
         if not toolchain_root:
-            print(f"❌ Error: {env_var} is not set.")
+            logger.error(f"{env_var} environment variable is not set")
             return False
         
         basename = os.path.basename(toolchain_root.strip("\\/"))        
         if basename != required_version:
-            print(f"❌ Error: Cross-compilation toolchain version mismatch. Found '{basename}', expected '{required_version}'.")
+            logger.error(f"Cross-compilation toolchain version mismatch. Found '{basename}', expected '{required_version}'")
             return False
         
         if not os.path.exists(toolchain_root):
-            print(f"❌ Error: Toolchain path does not exist: {toolchain_root}")
+            logger.error(f"Toolchain path does not exist: {toolchain_root}")
             return False
         
         return True
@@ -204,7 +247,9 @@ class UnrealEngineManager:
         convai_plugin_dir = PluginManager.find_plugin_directory(self.project_dir, config.get_plugin_file_name("convai"))
         if convai_plugin_dir:
             metahuman_dir = os.path.join(convai_plugin_dir, config.get_content_dir_name(), config.get_metahumans_folder_name())
-            FileUtilityManager.delete_directory_if_exists(metahuman_dir) 
+            if os.path.exists(metahuman_dir):
+                FileUtilityManager.delete_directory_if_exists(metahuman_dir)
+                logger.debug("Removed MetaHumans folder from project")
     
     @staticmethod
     def _extract_engine_version(installation_dir: str) -> str:
@@ -221,7 +266,7 @@ class UnrealEngineManager:
             "Version.h",
         )
         if not os.path.exists(version_file):
-            print("Error: Version.h not found. Check engine installation.")
+            logger.error("Version.h not found. Check engine installation")
             return None
 
         version = {}
@@ -237,7 +282,7 @@ class UnrealEngineManager:
             if 'major' in version and 'minor' in version:
                 return f"{version['major']}.{version['minor']}"
         except Exception as e:
-            print(f"Error reading version: {e}")
+            logger.error(f"Error reading engine version: {e}")
         return None
 
     @staticmethod
@@ -260,7 +305,7 @@ class UnrealEngineManager:
             with open(uproject_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
         except Exception as e:
-            print(f"Error updating .uproject: {e}")
+            logger.error(f"Error updating .uproject file: {e}")
 
     @staticmethod
     def _enable_plugin(
@@ -330,7 +375,7 @@ MetaDataTagsForAssetRegistry=()
         with open(default_game_ini_path, "w", encoding="utf-8") as file:
             file.write(ini_content.strip() + "\n")
 
-        print(f"DefaultGame.ini has been updated with plugin name: {plugin_name}")
+        logger.debug(f"Updated DefaultGame.ini with plugin: {plugin_name}")
 
     @staticmethod
     def _update_engine_ini(project_dir, convai_api_key):
@@ -356,10 +401,10 @@ API_Key={convai_api_key}
 """
         with open(default_engine_ini_path, "a", encoding="utf-8") as file:
             file.write(lines_to_add.strip() + "\n")
+        logger.debug("Updated DefaultEngine.ini with API key")
     
     @staticmethod
     def _update_input_ini(project_dir):
-
         config_dir = os.path.join(project_dir, config.get_config_dir_name())
         os.makedirs(config_dir, exist_ok=True)
         default_input_ini_path = os.path.join(config_dir, config.get_config_file_name("default_input"))
@@ -448,24 +493,23 @@ DoubleClickTime=0.200000
 +ActionMappings=(ActionName="PrimaryAction",bShift=False,bCtrl=False,bAlt=False,bCmd=False,Key=LeftMouseButton)
 +AxisMappings=(AxisName="Look Up / Down Gamepad",Scale=1.000000,Key=Gamepad_RightY)
 +AxisMappings=(AxisName="Look Up / Down Mouse",Scale=-1.000000,Key=MouseY)
-+AxisMappings=(AxisName="Move Forward / Backward",Scale=-1.000000,Key=Down)
-+AxisMappings=(AxisName="Move Forward / Backward",Scale=1.000000,Key=Gamepad_LeftY)
++AxisMappings=(AxisName="Move Forward / Backward",Scale=1.000000,Key=W)
 +AxisMappings=(AxisName="Move Forward / Backward",Scale=-1.000000,Key=S)
 +AxisMappings=(AxisName="Move Forward / Backward",Scale=1.000000,Key=Up)
-+AxisMappings=(AxisName="Move Forward / Backward",Scale=1.000000,Key=W)
++AxisMappings=(AxisName="Move Forward / Backward",Scale=-1.000000,Key=Down)
++AxisMappings=(AxisName="Move Forward / Backward",Scale=1.000000,Key=Gamepad_LeftY)
 +AxisMappings=(AxisName="Move Right / Left",Scale=-1.000000,Key=A)
 +AxisMappings=(AxisName="Move Right / Left",Scale=1.000000,Key=D)
 +AxisMappings=(AxisName="Move Right / Left",Scale=1.000000,Key=Gamepad_LeftX)
 +AxisMappings=(AxisName="Turn Right / Left Gamepad",Scale=1.000000,Key=Gamepad_RightX)
-+AxisMappings=(AxisName="Turn Right / Left Gamepad",Scale=-1.000000,Key=Left)
-+AxisMappings=(AxisName="Turn Right / Left Gamepad",Scale=1.000000,Key=Right)
 +AxisMappings=(AxisName="Turn Right / Left Mouse",Scale=1.000000,Key=MouseX)
-DefaultPlayerInputClass=/Script/Engine.PlayerInput
-DefaultInputComponentClass=/Script/Engine.InputComponent
+DefaultPlayerInputClass=/Script/EnhancedInput.EnhancedPlayerInput
+DefaultInputComponentClass=/Script/EnhancedInput.EnhancedInputComponent
 DefaultTouchInterface=/Engine/MobileResources/HUD/DefaultVirtualJoysticks.DefaultVirtualJoysticks
 -ConsoleKeys=Tilde
 +ConsoleKeys=Tilde
-    """
-
++ConsoleKeys=Caret
+"""
         with open(default_input_ini_path, "w", encoding="utf-8") as file:
             file.write(content_to_write.strip() + "\n")
+        logger.debug("Updated DefaultInput.ini")

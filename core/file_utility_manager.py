@@ -8,15 +8,8 @@ import shutil
 import json
 import uuid
 import zipfile
-import logging
 
-# Configure logger for this module
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    logger.addHandler(handler)
+from core.logger import logger
 
 class FileUtilityManager:
     """Utility methods for filesystem and metadata operations."""
@@ -29,14 +22,13 @@ class FileUtilityManager:
         try:
             with zipfile.ZipFile(source_path, 'r') as zip_ref:
                 zip_ref.extractall(dest_path)
+            logger.debug(f"Extracted archive: {os.path.basename(source_path)}")
         except zipfile.BadZipFile as e:
             logger.error(f"Failed to unzip {source_path} (bad zip): {e}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error during unzip of {source_path}: {e}")
             raise
-        finally:
-            logger.info(f"Unzip attempted: {source_path} -> {dest_path}")
 
     @staticmethod
     def copy_file_to_directory(src: str, dst_dir: str) -> None:
@@ -46,11 +38,10 @@ class FileUtilityManager:
         try:
             os.makedirs(dst_dir, exist_ok=True)
             shutil.copy(src, dst_dir)
+            logger.debug(f"Copied file: {os.path.basename(src)}")
         except Exception as e:
             logger.error(f"Failed to copy {src} to {dst_dir}: {e}")
             raise
-        finally:
-            logger.info(f"Copy attempted: {src} -> {dst_dir}")
 
     @staticmethod
     def generate_unique_str() -> str:
@@ -83,12 +74,10 @@ class FileUtilityManager:
         if os.path.exists(directory_path) and os.path.isdir(directory_path):
             try:
                 shutil.rmtree(directory_path)
-                print(f"Deleted directory: {directory_path}")
+                logger.debug(f"Deleted directory: {os.path.basename(directory_path)}")
             except Exception as e:
-                print(f"Failed to delete {directory_path}: {e}")
+                logger.error(f"Failed to delete directory {directory_path}: {e}")
 
- 
-    
     @staticmethod 
     def delete_file_if_exists(file_path):
         """
@@ -101,13 +90,13 @@ class FileUtilityManager:
             if os.path.isfile(file_path):
                 try:
                     os.remove(file_path)
-                    print(f"Deleted file: {file_path}")
+                    logger.debug(f"Deleted file: {os.path.basename(file_path)}")
                 except OSError as e:
-                    print(f"❌ Error deleting file {file_path}: {e}")
+                    logger.error(f"Error deleting file {file_path}: {e}")
             else:
-                print(f"⚠️ Warning: Path exists but is not a file: {file_path}")
+                logger.warning(f"Path exists but is not a file: {file_path}")
         else:
-            print(f"⚠️ Warning: File not found: {file_path}")
+            logger.debug(f"File not found (already deleted): {file_path}")
         
     @staticmethod 
     def delete_paths(paths_to_delete):
@@ -119,7 +108,7 @@ class FileUtilityManager:
                 elif os.path.isdir(matched_path):
                     FileUtilityManager.delete_directory_if_exists(matched_path)
                 else:
-                    print(f"⚠️ Warning: Path does not exist or unknown type: {matched_path}")
+                    logger.warning(f"Path does not exist or unknown type: {matched_path}")
 
     @staticmethod 
     def update_file_content(file_path, old_value, new_value):
@@ -130,7 +119,7 @@ class FileUtilityManager:
             with open(file_path, 'r', encoding='utf-8') as file:
                 content = file.read()
         except (UnicodeDecodeError, IOError):
-            print(f"Skipping file due to read error: {file_path}")
+            logger.debug(f"Skipping file due to read error: {file_path}")
             return
 
         new_content = FileUtilityManager.case_preserving_replace(old_value, new_value, content)
@@ -138,9 +127,9 @@ class FileUtilityManager:
             try:
                 with open(file_path, 'w', encoding='utf-8') as file:
                     file.write(new_content)
-                #print(f"Updated '{old_value}' to '{new_value}' in {file_path}")
+                logger.debug(f"Updated content in {os.path.basename(file_path)}")
             except IOError:
-                print(f"Error writing to file: {file_path}")
+                logger.error(f"Error writing to file: {file_path}")
     
     @staticmethod 
     def rename_file(file_path, old_value, new_value):
@@ -153,9 +142,7 @@ class FileUtilityManager:
             new_file_path = os.path.join(directory, new_file_name)
             if not os.path.exists(new_file_path):
                 os.rename(file_path, new_file_path)
-                #print(f"Renamed file: {file_path} -> {new_file_path}")
-            #else:
-                #print(f"File already exists: {new_file_path}")
+                logger.debug(f"Renamed file: {file_name} -> {new_file_name}")
     
     @staticmethod 
     def rename_directory(directory, old_value, new_value):
@@ -171,10 +158,8 @@ class FileUtilityManager:
 
             if not os.path.exists(new_dir_path):
                 os.rename(directory, new_dir_path)
-                #print(f"Renamed directory: {directory} -> {new_dir_path}")
+                logger.debug(f"Renamed directory: {dir_name} -> {new_dir_name}")
                 return new_dir_path  # Return the new directory path for further operations
-            #else:
-            #print(f"Directory already exists: {new_dir_path}")
 
         return directory  # Return the original directory if no renaming occurred
     
@@ -198,6 +183,7 @@ class FileUtilityManager:
                     FileUtilityManager.update_file_content(file_path, old_value, new_value)
                 FileUtilityManager.rename_file(file_path, old_value, new_value)
 
+            # Rename directories
             for dir_name in dirs:
                 dir_path = os.path.join(root, dir_name)
                 FileUtilityManager.rename_directory(dir_path, old_value, new_value)
@@ -205,72 +191,71 @@ class FileUtilityManager:
     @staticmethod 
     def case_preserving_replace(old_value, new_value, text):
         """
-        Replace occurrences of the old_value within the text, preserving the original case of the matched value.
+        Replace old_value with new_value in the text, preserving the case of the original.
         """
+        # Define a function to replace with matching case
         def replace_with_matching_case(match):
-            matched_text = match.group(0)
-            if matched_text.isupper():
+            original = match.group(0)
+            if original.isupper():
                 return new_value.upper()
-            elif matched_text.islower():
+            elif original.islower():
                 return new_value.lower()
-            elif matched_text[0].isupper() and matched_text[1:].islower():
-                return new_value.capitalize()
-            return new_value
+            elif original.istitle():
+                return new_value.title()
+            else:
+                return new_value
 
-        pattern = re.compile(re.escape(old_value), re.IGNORECASE)
-        return pattern.sub(replace_with_matching_case, text)
+        # Use re.sub with re.IGNORECASE for case-insensitive matching
+        return re.sub(re.escape(old_value), replace_with_matching_case, text, flags=re.IGNORECASE)
 
     @staticmethod
     def save_metadata(project_dir, data: dict):
         """
-        Save or update multiple key-value pairs in ModdingMetaData.txt inside ProjectDir/ConvaiEssentials/.
-
-        Args:
-            project_dir (str): Path to the Unreal project directory.
-            data (dict): Dictionary of field_name -> field_value to save.
+        Save metadata to ModdingMetaData.txt in the project directory.
         """
-        metadata_dir = os.path.join(project_dir, "ConvaiEssentials")
-        os.makedirs(metadata_dir, exist_ok=True)
-
-        metadata_file = os.path.join(metadata_dir, "ModdingMetaData.txt")
-
-        # Load existing metadata if the file exists
-        metadata = {}
+        metadata_file = os.path.join(project_dir, "ModdingMetaData.txt")
+        
+        try:
+            with open(metadata_file, "w", encoding="utf-8") as file:
+                json.dump(data, file, indent=4)
+            logger.debug("Saved project metadata")
+        except Exception as e:
+            logger.error(f"Failed to save metadata: {e}")
+            
+        # For backward compatibility, also check if ModdingMetaData.txt already exists and attempt to read it first
         if os.path.exists(metadata_file):
             try:
                 with open(metadata_file, "r", encoding="utf-8") as file:
-                    metadata = json.load(file)
-            except (json.JSONDecodeError, IOError):
-                print("Warning: Existing ModdingMetaData.txt is corrupted or unreadable. Overwriting.")
-
-        # Update with new data
-        metadata.update(data)
-
-        # Save back to file
-        with open(metadata_file, "w", encoding="utf-8") as file:
-            json.dump(metadata, file, indent=4)
+                    existing_data = json.load(file)
+                # Merge new data with existing data (new data takes precedence)
+                existing_data.update(data)
+                with open(metadata_file, "w", encoding="utf-8") as file:
+                    json.dump(existing_data, file, indent=4)
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.warning("Existing metadata file is corrupted or unreadable. Overwriting.")
+                with open(metadata_file, "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=4)
+            except Exception as e:
+                logger.error(f"Unexpected error handling metadata: {e}")
 
     @staticmethod 
     def get_metadata(project_dir):
         """
-        Load metadata from ModdingMetaData.txt inside ProjectDir/ConvaiEssentials/.
-
-        Args:
-            project_dir (str): Path to the Unreal project directory.
-
-        Returns:
-            dict: Loaded metadata dictionary, or empty dict if file not found or corrupted.
+        Get metadata from ModdingMetaData.txt in the project directory.
+        Returns a dictionary with the metadata, or an empty dict if file doesn't exist or can't be read.
         """
-        metadata_file = os.path.join(project_dir, "ConvaiEssentials", "ModdingMetaData.txt")
-
+        metadata_file = os.path.join(project_dir, "ModdingMetaData.txt")
+        
         if not os.path.exists(metadata_file):
-            print(f"Warning: Metadata file not found at {metadata_file}. Returning empty metadata.")
+            logger.warning(f"Metadata file not found. This may be a legacy project")
             return {}
-
+        
         try:
             with open(metadata_file, "r", encoding="utf-8") as file:
-                metadata = json.load(file)
-                return metadata
-        except (json.JSONDecodeError, IOError):
-            print(f"Warning: Failed to load metadata from {metadata_file}. Returning empty metadata.")
+                return json.load(file)
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.warning(f"Failed to load metadata from {metadata_file}. Returning empty metadata")
+            return {}
+        except Exception as e:
+            logger.error(f"Unexpected error reading metadata: {e}")
             return {}

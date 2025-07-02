@@ -9,6 +9,7 @@ from core.config_manager import config
 from core.file_utility_manager import FileUtilityManager
 from core.github_manager import GitHubManager
 from core.plugin_manager import PluginManager
+from core.logger import logger
 
 class DownloadManager:
     
@@ -29,14 +30,14 @@ class DownloadManager:
         destination_path = os.path.join(download_dir, filename)
         url = f"https://drive.google.com/uc?id={file_id}"
         
-        print(f"Downloading file from Google Drive: {file_id} to {destination_path}")
-        gdown.download(url, destination_path, quiet=False)
+        logger.debug(f"Downloading from Google Drive: {filename}")
+        gdown.download(url, destination_path, quiet=True)
         
         if os.path.exists(destination_path):
-            print(f"Download complete: {destination_path}")
+            logger.debug(f"Google Drive download complete: {filename}")
             return destination_path
         else:
-            print("Error: Download failed.")
+            logger.error("Google Drive download failed")
             return None
 
     @staticmethod
@@ -44,7 +45,7 @@ class DownloadManager:
         download_dir = os.path.join(project_dir, "ConvaiEssentials")
         os.makedirs(download_dir, exist_ok=True)
         url = f"https://drive.google.com/drive/folders/{folder_id}"
-        gdown.download_folder(url, output=download_dir, use_cookies=False, quiet=False)
+        gdown.download_folder(url, output=download_dir, use_cookies=False, quiet=True)
         
         for f in os.listdir(download_dir):
             file_path = os.path.join(download_dir, f)
@@ -109,7 +110,7 @@ class DownloadManager:
 
         for attempt in range(max_retries):
             try:
-                print(f"Fetching latest release from GitHub ({github_repo}), attempt {attempt + 1}...")
+                logger.debug(f"Fetching latest release from {github_repo}, attempt {attempt + 1}...")
                 response = requests.get(github_api_url)
                 response.raise_for_status()
                 release_data = response.json()
@@ -122,10 +123,10 @@ class DownloadManager:
                         break
 
                 if not zip_url:
-                    print(f"Error: No ZIP file found in the latest release of {github_repo}.")
+                    logger.error(f"No ZIP file found in the latest release of {github_repo}")
                     return None
 
-                print(f"Downloading {zip_url} to {zip_path}...")
+                logger.debug(f"Downloading {filename}...")
 
                 # Download file in chunks to avoid memory overflow
                 with requests.get(zip_url, stream=True) as r:
@@ -134,14 +135,14 @@ class DownloadManager:
                         for chunk in r.iter_content(chunk_size=8192):
                             file.write(chunk)
 
-                print(f"Download complete: {zip_path}")
+                logger.debug(f"Download complete: {filename}")
                 return zip_path
 
             except requests.RequestException as e:
-                print(f"Download failed (Attempt {attempt + 1} of {max_retries}): {e}")
+                logger.debug(f"Download attempt {attempt + 1} failed: {e}")
                 time.sleep(2)  # Wait before retrying
 
-        print("Download failed after multiple attempts.")
+        logger.error("Download failed after multiple attempts")
         return None
 
     @staticmethod
@@ -158,7 +159,7 @@ class DownloadManager:
         """
 
         if not os.path.exists(zip_path):
-            print(f"Error: ZIP file not found at {zip_path}")
+            logger.error(f"ZIP file not found: {zip_path}")
             return None
 
         # Temporary extraction path inside Plugins directory
@@ -167,7 +168,7 @@ class DownloadManager:
 
         try:
             # Extract the ZIP
-            print(f"Extracting {zip_path} to {temp_extraction_path}...")
+            logger.debug(f"Extracting plugin from {os.path.basename(zip_path)}...")
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(temp_extraction_path)
 
@@ -182,7 +183,7 @@ class DownloadManager:
                     break
 
             if not plugin_folder:
-                print("Error: No .uplugin file found in the extracted content.")
+                logger.error("No .uplugin file found in the extracted content")
                 return None
 
             # Move the extracted plugin to the Plugins directory
@@ -193,7 +194,7 @@ class DownloadManager:
                 shutil.rmtree(final_plugin_path)
 
             shutil.move(plugin_folder, final_plugin_path)
-            print(f"Plugin successfully installed at: {final_plugin_path}")
+            logger.debug(f"Plugin installed: {os.path.basename(final_plugin_path)}")
 
             # Cleanup: Remove temporary extraction folder
             shutil.rmtree(temp_extraction_path, ignore_errors=True)
@@ -201,7 +202,7 @@ class DownloadManager:
             return final_plugin_path
 
         except zipfile.BadZipFile:
-            print("Error: The downloaded file is not a valid ZIP archive.")
+            logger.error("The downloaded file is not a valid ZIP archive")
             return None
 
     @staticmethod
@@ -226,10 +227,8 @@ class DownloadManager:
             needs_post_process = config.get_github_post_process(plugin_name)
             
             if not repo:
-                print(f"❌ Error: {plugin_name} GitHub repository not configured")
+                logger.error(f"{plugin_name} GitHub repository not configured")
                 return False
-            
-            print(f"📦 Downloading {plugin_name} from GitHub: {repo}")
             
             # Download plugin from GitHub
             downloaded_file = github_manager.download_plugin_from_release(
@@ -240,7 +239,7 @@ class DownloadManager:
             )
             
             if not downloaded_file:
-                print(f"❌ Error: Failed to download {plugin_name} from GitHub")
+                logger.error(f"Failed to download {plugin_name} from GitHub")
                 return False
             
             # Handle content packs vs plugins differently
@@ -248,25 +247,24 @@ class DownloadManager:
                 # Content pack - extract to Content folder
                 extracted_path = DownloadManager.extract_content_pack(downloaded_file, project_dir)
                 if not extracted_path:
-                    print(f"❌ Error: Failed to extract {plugin_name} content pack")
+                    logger.error(f"Failed to extract {plugin_name} content pack")
                     return False
             else:
                 # Regular plugin - extract to Plugins folder
                 extracted_path = DownloadManager.extract_plugin_zip(downloaded_file, project_dir)
                 if not extracted_path:
-                    print(f"❌ Error: Failed to extract {plugin_name}")
+                    logger.error(f"Failed to extract {plugin_name}")
                     return False
             
             # Post-process if needed (Convai-specific modifications)
             if needs_post_process and plugin_name == "convai_plugin":
                 if not PluginManager.post_process_convai_plugin(project_dir):
-                    print("⚠️ Warning: Post-processing failed, but plugin was installed")
+                    logger.warning("Post-processing failed, but plugin was installed")
             
-            print(f"✅ Successfully downloaded and installed {plugin_name} from GitHub")
             return True
             
         except Exception as e:
-            print(f"❌ Error downloading {plugin_name} from GitHub: {e}")
+            logger.error(f"Error downloading {plugin_name} from GitHub: {e}")
             return False
 
     @staticmethod
@@ -275,16 +273,19 @@ class DownloadManager:
         
         # Download all configured GitHub plugins
         github_plugins = config.get_github_plugins()
-        github_success = True
+        success_count = 0
         
-        for plugin_name in github_plugins:
-            print(f"📦 Downloading {plugin_name} from GitHub...")
-            if not DownloadManager.download_plugin_from_github(project_dir, plugin_name):
-                print(f"⚠️ Warning: Failed to download {plugin_name} from GitHub")
-                github_success = False
+        for i, plugin_name in enumerate(github_plugins, 1):
+            logger.progress(i, len(github_plugins), f"Downloading {plugin_name.replace('_', ' ').title()}")
+            if DownloadManager.download_plugin_from_github(project_dir, plugin_name):
+                success_count += 1
+            else:
+                logger.warning(f"Failed to download {plugin_name}")
         
-        if github_success and github_plugins:
-            print(f"✅ Successfully downloaded {len(github_plugins)} plugins from GitHub")
+        if success_count == len(github_plugins):
+            logger.success(f"Downloaded all {len(github_plugins)} dependencies successfully")
+        else:
+            logger.warning(f"Downloaded {success_count}/{len(github_plugins)} dependencies")
         
     @staticmethod
     def download_convai_realusion_content(project_dir):
@@ -307,10 +308,10 @@ class DownloadManager:
         os.makedirs(content_dir, exist_ok=True)
         
         try:
-            print(f"📦 Extracting content pack {zip_path} to {content_dir}...")
+            logger.debug(f"Extracting content pack to Content folder...")
             FileUtilityManager.unzip(zip_path, content_dir)
-            print(f"✅ Content pack successfully extracted to: {content_dir}")
+            logger.debug("Content pack successfully extracted")
             return content_dir
         except Exception as e:
-            print(f"❌ Error extracting content pack: {e}")
+            logger.error(f"Error extracting content pack: {e}")
             return None
