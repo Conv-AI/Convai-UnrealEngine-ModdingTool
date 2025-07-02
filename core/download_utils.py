@@ -404,11 +404,19 @@ class DownloadManager:
                 print(f"❌ Error: Failed to download {plugin_name} from GitHub")
                 return False
             
-            # Extract plugin to project
-            extracted_path = DownloadManager.extract_plugin_zip(downloaded_file, project_dir)
-            if not extracted_path:
-                print(f"❌ Error: Failed to extract {plugin_name}")
-                return False
+            # Handle content packs vs plugins differently
+            if plugin_name == "convai_convenience_pack":
+                # Content pack - extract to Content folder
+                extracted_path = DownloadManager.extract_content_pack(downloaded_file, project_dir)
+                if not extracted_path:
+                    print(f"❌ Error: Failed to extract {plugin_name} content pack")
+                    return False
+            else:
+                # Regular plugin - extract to Plugins folder
+                extracted_path = DownloadManager.extract_plugin_zip(downloaded_file, project_dir)
+                if not extracted_path:
+                    print(f"❌ Error: Failed to extract {plugin_name}")
+                    return False
             
             # Post-process if needed (Convai-specific modifications)
             if needs_post_process and plugin_name == "convai_plugin":
@@ -439,16 +447,31 @@ class DownloadManager:
         if github_success and github_plugins:
             print(f"✅ Successfully downloaded {len(github_plugins)} plugins from GitHub")
         
-        # Download Google Drive content
-        print("📦 Downloading ConvaiConveniencePack from Google Drive...")
-        DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_convenience_pack"), os.path.join(project_dir, "ConvaiEssentials"), "ConvaiConveniencePack.zip")
-        FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiConveniencePack.zip"), os.path.join(project_dir, "Content"))
-        
-        # Download other necessary plugins (still from Google Drive)
-        print("📦 Downloading additional plugins from Google Drive...")
-        DownloadManager.download_plugins_from_gdrive_folder(config.get_google_drive_id("plugins_folder"), project_dir)
-
     @staticmethod
     def download_convai_realusion_content(project_dir):
         DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_reallusion_content"), os.path.join(project_dir, "ConvaiEssentials"), "ConvaiRealusionContent.zip")
         FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiRealusionContent.zip"), os.path.join(project_dir))
+
+    @staticmethod
+    def extract_content_pack(zip_path, project_dir):
+        """
+        Extract a content pack to the project's Content folder.
+        
+        Args:
+            zip_path: Path to the downloaded ZIP file
+            project_dir: Project directory path
+            
+        Returns:
+            Path to extracted content or None if extraction failed
+        """
+        content_dir = os.path.join(project_dir, "Content")
+        os.makedirs(content_dir, exist_ok=True)
+        
+        try:
+            print(f"📦 Extracting content pack {zip_path} to {content_dir}...")
+            FileUtilityManager.unzip(zip_path, content_dir)
+            print(f"✅ Content pack successfully extracted to: {content_dir}")
+            return content_dir
+        except Exception as e:
+            print(f"❌ Error extracting content pack: {e}")
+            return None

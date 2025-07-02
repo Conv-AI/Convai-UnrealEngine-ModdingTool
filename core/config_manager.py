@@ -28,12 +28,19 @@ class ConfigManager:
                 "repo": "Conv-AI/Convai-UnrealEngine-HTTP",
                 "asset_patterns": [".zip", "plugin", "unreal", "ue"],
                 "post_process": False
+            },
+            "convai_convenience_pack": {
+                "repo": "Conv-AI/Convai-UnrealEngine-CCPack",
+                "asset_patterns": [".zip", "pack", "convai", "convenience"],
+                "post_process": False
+            },
+            "convai_pak_manager": {
+                "repo": "Conv-AI/Convai-UnrealEngine-PakManager",
+                "asset_patterns": [".zip", "plugin", "pak", "manager"],
+                "post_process": False
             }
         },
         "google_drive": {
-            "convai_pak_manager_plugin": "1Cioj7IhSV3s-bBHiFbgfcFyUIIsvHyfe",
-            "convai_convenience_pack": "1y2lkBFo7ebRFt8SIiV9ME1mmRwgpnM3h",
-            "plugins_folder": "11n7EZW4SBd4Ri9Q6GuXFdoLrwCZvnnwq",
             "convai_reallusion_content": "1bAatTW4vYycDbGLeO1pGILc3OVOOR3je"
         },
         "project_settings": {
