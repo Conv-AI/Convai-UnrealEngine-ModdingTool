@@ -51,6 +51,39 @@ class ConfigManager:
                 "ConvaiPakManager",
                 "JsonBlueprintUtilities"
             ]
+        },
+        "directory_names": {
+            "plugins": "Plugins",
+            "content": "Content", 
+            "config": "Config",
+            "essentials": "ConvaiEssentials",
+            "editor": "Editor",
+            "source": "Source",
+            "templates": "Templates"
+        },
+        "file_names": {
+            "config_files": {
+                "default_game": "DefaultGame.ini",
+                "default_engine": "DefaultEngine.ini", 
+                "default_input": "DefaultInput.ini"
+            },
+            "metadata_file": "ModdingMetaData.txt",
+            "plugin_files": {
+                "convai": "ConvAI.uplugin",
+                "convai_http": "ConvaiHTTP.uplugin",
+                "convai_pak_manager": "ConvaiPakManager.uplugin"
+            },
+            "build_file": "Convai.Build.cs"
+        },
+        "asset_names": {
+            "uploader_asset": "AssetUploader.uasset",
+            "metahumans_folder": "MetaHumans",
+            "convenience_pack": "ConvaiConveniencePack",
+            "template_name": "TP_Blank"
+        },
+        "unreal_paths": {
+            "engine_binary": "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe",
+            "version_file": "Engine/Source/Runtime/Launch/Resources/Version.h"
         }
     }
     
@@ -129,6 +162,70 @@ class ConfigManager:
     def get_modding_tool_version(self) -> str:
         """Get modding tool version."""
         return self.get('modding_tool.version', '1.0.0')
+
+    # Directory name getters
+    def get_plugins_dir_name(self) -> str:
+        """Get plugins directory name."""
+        return self.get('directory_names.plugins', 'Plugins')
+    
+    def get_content_dir_name(self) -> str:
+        """Get content directory name."""
+        return self.get('directory_names.content', 'Content')
+    
+    def get_config_dir_name(self) -> str:
+        """Get config directory name."""
+        return self.get('directory_names.config', 'Config')
+    
+    def get_essentials_dir_name(self) -> str:
+        """Get essentials directory name."""
+        return self.get('directory_names.essentials', 'ConvaiEssentials')
+    
+    def get_editor_dir_name(self) -> str:
+        """Get editor directory name."""
+        return self.get('directory_names.editor', 'Editor')
+    
+    # File name getters
+    def get_config_file_name(self, file_type: str) -> str:
+        """Get configuration file name by type."""
+        return self.get(f'file_names.config_files.{file_type}', f'Default{file_type.title()}.ini')
+    
+    def get_metadata_file_name(self) -> str:
+        """Get metadata file name."""
+        return self.get('file_names.metadata_file', 'ModdingMetaData.txt')
+    
+    def get_plugin_file_name(self, plugin_type: str) -> str:
+        """Get plugin file name by type."""
+        return self.get(f'file_names.plugin_files.{plugin_type}', f'{plugin_type}.uplugin')
+    
+    def get_build_file_name(self) -> str:
+        """Get build file name."""
+        return self.get('file_names.build_file', 'Convai.Build.cs')
+    
+    # Asset name getters
+    def get_uploader_asset_name(self) -> str:
+        """Get uploader asset name."""
+        return self.get('asset_names.uploader_asset', 'AssetUploader.uasset')
+    
+    def get_metahumans_folder_name(self) -> str:
+        """Get MetaHumans folder name."""
+        return self.get('asset_names.metahumans_folder', 'MetaHumans')
+    
+    def get_convenience_pack_name(self) -> str:
+        """Get convenience pack name."""
+        return self.get('asset_names.convenience_pack', 'ConvaiConveniencePack')
+    
+    def get_template_name(self) -> str:
+        """Get Unreal Engine template name."""
+        return self.get('asset_names.template_name', 'TP_Blank')
+    
+    # Unreal Engine path getters
+    def get_engine_binary_path(self) -> str:
+        """Get Unreal Engine binary path."""
+        return self.get('unreal_paths.engine_binary', 'Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe')
+    
+    def get_version_file_path(self) -> str:
+        """Get Unreal Engine version file path."""
+        return self.get('unreal_paths.version_file', 'Engine/Source/Runtime/Launch/Resources/Version.h')
 
 # Singleton instance
 config = ConfigManager() 

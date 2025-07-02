@@ -98,31 +98,60 @@ class UnrealEngineManager:
         self._update_input_ini(self.project_dir)
 
     def update_modding_dependencies(self) -> None:
-        paths_to_delete = [
-            os.path.join(self.project_dir, "Plugins", "Convai"),
-            os.path.join(self.project_dir, "Plugins", "ConvaiHTTP"),
-            os.path.join(self.project_dir, "Plugins", "ConvaiPakManager"),
-            os.path.join(self.project_dir, "Content", "ConvaiConveniencePack"),
+        content_dir = os.path.join(self.project_dir, config.get_content_dir_name())
+        paths_to_delete = []
+        
+        # Use find_plugin_directory to locate existing Convai plugins from config
+        convai_plugin_names = [
+            config.get_plugin_file_name("convai"),
+            config.get_plugin_file_name("convai_http"), 
+            config.get_plugin_file_name("convai_pak_manager")
         ]
-        zip_dir = os.path.join(self.project_dir, "ConvaiEssentials")
-        zip_files = [os.path.join(zip_dir, f) for f in os.listdir(zip_dir) if f.lower().endswith(".zip")]
+        
+        for plugin_file in convai_plugin_names:
+            plugin_dir = PluginManager.find_plugin_directory(self.project_dir, plugin_file)
+            if plugin_dir:
+                paths_to_delete.append(plugin_dir)
+                print(f"📁 Found existing plugin to update: {plugin_dir}")
+        
+        # Add content pack directory if it exists
+        convenience_pack_dir = os.path.join(content_dir, config.get_convenience_pack_name())
+        if os.path.exists(convenience_pack_dir):
+            paths_to_delete.append(convenience_pack_dir)
+            print(f"📁 Found existing content pack to update: {convenience_pack_dir}")
+        
+        # Get zip files from ConvaiEssentials directory
+        zip_dir = os.path.join(self.project_dir, config.get_essentials_dir_name())
+        zip_files = []
+        if os.path.exists(zip_dir):
+            zip_files = [os.path.join(zip_dir, f) for f in os.listdir(zip_dir) if f.lower().endswith(".zip")]
+            if zip_files:
+                print(f"📁 Found {len(zip_files)} zip files to clean up")
 
-        FileUtilityManager.delete_paths(paths_to_delete)
-        FileUtilityManager.delete_paths(zip_files)
+        # Delete old installations and download fresh copies
+        if paths_to_delete:
+            print(f"🗑️ Removing {len(paths_to_delete)} existing installations...")
+            FileUtilityManager.delete_paths(paths_to_delete)
+        
+        if zip_files:
+            print("🗑️ Cleaning up old zip files...")
+            FileUtilityManager.delete_paths(zip_files)
+        
+        print("📦 Downloading latest dependencies...")
         DownloadManager.download_modding_dependencies(self.project_dir)
     
     def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
         # Find ConvaiPakManager plugin directory dynamically
-        pak_manager_dir = PluginManager.find_plugin_directory(self.project_dir, "ConvaiPakManager.uplugin")
+        pak_manager_dir = PluginManager.find_plugin_directory(self.project_dir, config.get_plugin_file_name("convai_pak_manager"))
         if not pak_manager_dir:
             print("❌ Error: ConvaiPakManager plugin directory not found")
             return
         
-        source = os.path.join(pak_manager_dir, "Content", "Editor", "AssetUploader.uasset")
-        destination = os.path.join(self.project_dir, "Content", "Editor")
+        source = os.path.join(pak_manager_dir, config.get_content_dir_name(), config.get_editor_dir_name(), config.get_uploader_asset_name())
+        destination = os.path.join(self.project_dir, config.get_content_dir_name(), config.get_editor_dir_name())
         
         if not os.path.exists(source):
-            print(f"❌ Error: AssetUploader.uasset not found at {source}")
+            print(f"❌ Error: {config.get_uploader_asset_name()} not found at {source}")
             return
             
         FileUtilityManager.copy_file_to_directory(source, destination)
@@ -169,15 +198,13 @@ class UnrealEngineManager:
     
     def remove_metahuman_folder(self) -> None:
         """
-        Deletes the 'MetaHumans' folder under the project directory, if it exists.
+        Deletes the MetaHumans folder under the project directory, if it exists.
         """
-        plugins_dir = Path(self.project_dir) / "Plugins"
-    
-        for plugin_path in plugins_dir.glob("*/ConvAI.uplugin"):
-            plugin_root = plugin_path.parent  
-            metahuman_dir = plugin_root / "Content" / "MetaHumans"
-            FileUtilityManager.delete_directory_if_exists(metahuman_dir)
-            break 
+        # Find the Convai plugin directory and remove MetaHumans folder
+        convai_plugin_dir = PluginManager.find_plugin_directory(self.project_dir, config.get_plugin_file_name("convai"))
+        if convai_plugin_dir:
+            metahuman_dir = os.path.join(convai_plugin_dir, config.get_content_dir_name(), config.get_metahumans_folder_name())
+            FileUtilityManager.delete_directory_if_exists(metahuman_dir) 
     
     @staticmethod
     def _extract_engine_version(installation_dir: str) -> str:
@@ -270,11 +297,11 @@ class UnrealEngineManager:
             plugin_name (str): The name of the content-only plugin.
         """
         # Ensure the Config directory exists
-        config_dir = os.path.join(project_dir, "Config")
+        config_dir = os.path.join(project_dir, config.get_config_dir_name())
         os.makedirs(config_dir, exist_ok=True)
 
         # Path to the DefaultGame.ini file
-        default_game_ini_path = os.path.join(config_dir, "DefaultGame.ini")
+        default_game_ini_path = os.path.join(config_dir, config.get_config_file_name("default_game"))
 
         # Hardcoded INI content with <PluginName> placeholder
         ini_content = r'''
@@ -314,10 +341,10 @@ MetaDataTagsForAssetRegistry=()
             project_dir (str): The path to your Unreal project directory.
             api_key (str): The Convai API key entered by the user.
         """
-        config_dir = os.path.join(project_dir, "Config")
+        config_dir = os.path.join(project_dir, config.get_config_dir_name())
         os.makedirs(config_dir, exist_ok=True)
 
-        default_engine_ini_path = os.path.join(config_dir, "DefaultEngine.ini")
+        default_engine_ini_path = os.path.join(config_dir, config.get_config_file_name("default_engine"))
 
         # Lines to append
         lines_to_add = f"""
@@ -333,9 +360,9 @@ API_Key={convai_api_key}
     @staticmethod
     def _update_input_ini(project_dir):
 
-        config_dir = os.path.join(project_dir, "Config")
+        config_dir = os.path.join(project_dir, config.get_config_dir_name())
         os.makedirs(config_dir, exist_ok=True)
-        default_input_ini_path = os.path.join(config_dir, "DefaultInput.ini")
+        default_input_ini_path = os.path.join(config_dir, config.get_config_file_name("default_input"))
 
         # Lines to append
         content_to_write = f"""

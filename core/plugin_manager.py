@@ -3,6 +3,8 @@ import json
 import re
 from typing import Optional
 
+from core.config_manager import config
+
 class PluginManager:
     """Manages plugin-specific operations like post-processing and configuration."""
     
@@ -18,7 +20,7 @@ class PluginManager:
         Returns:
             Path to the plugin directory containing the .uplugin file, or None if not found
         """
-        plugins_dir = os.path.join(project_dir, "Plugins")
+        plugins_dir = os.path.join(project_dir, config.get_plugins_dir_name())
         
         if not os.path.exists(plugins_dir):
             return None
@@ -142,7 +144,8 @@ class PluginManager:
         print("🔄 Post-processing Convai plugin...")
         
         # Find Convai plugin directory
-        convai_plugin_dir = PluginManager.find_plugin_directory(project_dir, "ConvAI.uplugin")
+        convai_plugin_file = config.get_plugin_file_name("convai")
+        convai_plugin_dir = PluginManager.find_plugin_directory(project_dir, convai_plugin_file)
         if not convai_plugin_dir:
             print("❌ Error: Could not find Convai plugin directory")
             return False
@@ -150,15 +153,15 @@ class PluginManager:
         print(f"📁 Found Convai plugin at: {convai_plugin_dir}")
         
         # 1. Remove EngineVersion from ConvAI.uplugin
-        uplugin_file = os.path.join(convai_plugin_dir, "ConvAI.uplugin")
+        uplugin_file = os.path.join(convai_plugin_dir, convai_plugin_file)
         if os.path.exists(uplugin_file):
             if not PluginManager.remove_engine_version_from_uplugin(uplugin_file):
                 print("⚠️ Warning: Failed to modify uplugin file")
         else:
-            print(f"⚠️ Warning: ConvAI.uplugin not found at {uplugin_file}")
+            print(f"⚠️ Warning: {convai_plugin_file} not found at {uplugin_file}")
         
         # 2. Update Convai.Build.cs
-        build_file = os.path.join(convai_plugin_dir, "Source", "Convai", "Convai.Build.cs")
+        build_file = os.path.join(convai_plugin_dir, "Source", "Convai", config.get_build_file_name())
         if os.path.exists(build_file):
             if not PluginManager.update_convai_build_file(build_file):
                 print("⚠️ Warning: Failed to modify build file")
