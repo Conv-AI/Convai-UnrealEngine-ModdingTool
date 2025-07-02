@@ -112,7 +112,7 @@ class UnrealEngineManager:
     
     def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
         # Find ConvaiPakManager plugin directory dynamically
-        pak_manager_dir = self._find_pak_manager_plugin_directory()
+        pak_manager_dir = DownloadManager.find_plugin_directory(self.project_dir, "ConvaiPakManager.uplugin")
         if not pak_manager_dir:
             print("❌ Error: ConvaiPakManager plugin directory not found")
             return
@@ -132,29 +132,7 @@ class UnrealEngineManager:
             DownloadManager.download_convai_realusion_content(self.project_dir)
             FileUtilityManager.remove_metahuman_folder(self.project_dir)
     
-    def _find_pak_manager_plugin_directory(self) -> str:
-        """
-        Find the ConvaiPakManager plugin directory by looking for ConvaiPakManager.uplugin file.
-        
-        Returns:
-            Path to the ConvaiPakManager plugin directory or None if not found
-        """
-        plugins_dir = os.path.join(self.project_dir, "Plugins")
-        
-        if not os.path.exists(plugins_dir):
-            return None
-        
-        # Look for ConvaiPakManager plugin directory (case variations)
-        for item in os.listdir(plugins_dir):
-            item_path = os.path.join(plugins_dir, item)
-            if os.path.isdir(item_path):
-                # Check if this directory contains ConvaiPakManager.uplugin
-                uplugin_file = os.path.join(item_path, "ConvaiPakManager.uplugin")
-                if os.path.exists(uplugin_file):
-                    print(f"📁 Found ConvaiPakManager plugin at: {item_path}")
-                    return item_path
-        
-        return None
+
     
     def can_create_modding_project(self) -> None:
         """

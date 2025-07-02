@@ -206,28 +206,30 @@ class DownloadManager:
             return None
 
     @staticmethod
-    def _find_convai_plugin_directory(project_dir: str) -> str:
+    def find_plugin_directory(project_dir: str, uplugin_filename: str) -> str:
         """
-        Find the Convai plugin directory in the project plugins folder.
+        Find a plugin directory by looking for the specified .uplugin file.
         
         Args:
             project_dir: Project directory path
+            uplugin_filename: Name of the .uplugin file to search for (e.g., "ConvAI.uplugin")
             
         Returns:
-            Path to Convai plugin directory or None if not found
+            Path to the plugin directory containing the .uplugin file, or None if not found
         """
         plugins_dir = os.path.join(project_dir, "Plugins")
         
         if not os.path.exists(plugins_dir):
             return None
         
-        # Look for ConvAI plugin directory (case variations)
+        # Look for plugin directory containing the specified .uplugin file
         for item in os.listdir(plugins_dir):
             item_path = os.path.join(plugins_dir, item)
             if os.path.isdir(item_path):
-                # Check if this directory contains ConvAI.uplugin
-                uplugin_file = os.path.join(item_path, "ConvAI.uplugin")
+                uplugin_file = os.path.join(item_path, uplugin_filename)
                 if os.path.exists(uplugin_file):
+                    plugin_name = uplugin_filename.replace('.uplugin', '')
+                    print(f"📁 Found {plugin_name} plugin at: {item_path}")
                     return item_path
         
         return None
@@ -339,7 +341,7 @@ class DownloadManager:
         print("🔄 Post-processing Convai plugin...")
         
         # Find Convai plugin directory
-        convai_plugin_dir = DownloadManager._find_convai_plugin_directory(project_dir)
+        convai_plugin_dir = DownloadManager.find_plugin_directory(project_dir, "ConvAI.uplugin")
         if not convai_plugin_dir:
             print("❌ Error: Could not find Convai plugin directory")
             return False
