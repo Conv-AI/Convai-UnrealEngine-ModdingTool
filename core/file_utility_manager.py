@@ -8,8 +8,11 @@ import shutil
 import json
 import uuid
 import zipfile
+import subprocess
+from typing import Dict, Any
 
 from core.logger import logger
+from core.config_manager import config
 
 class FileUtilityManager:
     """Utility methods for filesystem and metadata operations."""
@@ -209,32 +212,37 @@ class FileUtilityManager:
         return re.sub(re.escape(old_value), replace_with_matching_case, text, flags=re.IGNORECASE)
 
     @staticmethod
-    def save_metadata(project_dir, data: dict):
+    def save_metadata(project_dir, metadata):
         """
         Save metadata to ModdingMetaData.txt in the project directory.
         """
-        metadata_file = os.path.join(project_dir, "ModdingMetaData.txt")
+        essentials_dir = os.path.join(project_dir, config.get_essentials_dir_name())
+        metadata_file = os.path.join(essentials_dir, config.get_metadata_file_name())
+        
+        # Ensure ConvaiEssentials directory exists
+        if not os.path.exists(essentials_dir):
+            os.makedirs(essentials_dir)
         
         try:
             with open(metadata_file, "w", encoding="utf-8") as file:
-                json.dump(data, file, indent=4)
-            logger.debug("Saved project metadata")
+                json.dump(metadata, file, indent=4)
+            logger.info(f"Metadata saved to {metadata_file}")
         except Exception as e:
             logger.error(f"Failed to save metadata: {e}")
-            
+
         # For backward compatibility, also check if ModdingMetaData.txt already exists and attempt to read it first
         if os.path.exists(metadata_file):
             try:
                 with open(metadata_file, "r", encoding="utf-8") as file:
                     existing_data = json.load(file)
                 # Merge new data with existing data (new data takes precedence)
-                existing_data.update(data)
+                existing_data.update(metadata)
                 with open(metadata_file, "w", encoding="utf-8") as file:
                     json.dump(existing_data, file, indent=4)
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 logger.warning("Existing metadata file is corrupted or unreadable. Overwriting.")
                 with open(metadata_file, "w", encoding="utf-8") as file:
-                    json.dump(data, file, indent=4)
+                    json.dump(metadata, file, indent=4)
             except Exception as e:
                 logger.error(f"Unexpected error handling metadata: {e}")
 
@@ -244,15 +252,21 @@ class FileUtilityManager:
         Get metadata from ModdingMetaData.txt in the project directory.
         Returns a dictionary with the metadata, or an empty dict if file doesn't exist or can't be read.
         """
-        metadata_file = os.path.join(project_dir, "ModdingMetaData.txt")
+        essentials_dir = os.path.join(project_dir, config.get_essentials_dir_name())
+        metadata_file = os.path.join(essentials_dir, config.get_metadata_file_name())
+        
+        # Debug information
+        logger.debug(f"Looking for metadata file at: {metadata_file}")
         
         if not os.path.exists(metadata_file):
-            logger.warning(f"Metadata file not found. This may be a legacy project")
+            logger.warning("Metadata file not found. This may be a legacy project")
             return {}
         
         try:
             with open(metadata_file, "r", encoding="utf-8") as file:
-                return json.load(file)
+                metadata = json.load(file)
+                logger.debug(f"Successfully loaded metadata with keys: {list(metadata.keys())}")
+                return metadata
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             logger.warning(f"Failed to load metadata from {metadata_file}. Returning empty metadata")
             return {}

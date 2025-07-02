@@ -27,7 +27,7 @@ class InputManager:
         if self._existing_projects is None:
             self._existing_projects = []
             for root, dirs, files in os.walk(self.script_dir):
-                if 'ConvaiEssentials' in dirs and any(f.endswith('.uproject') for f in files):
+                if config.get_essentials_dir_name() in dirs and any(f.endswith('.uproject') for f in files):
                     self._existing_projects.append(root)
         if not self._existing_projects:
             return 'create'

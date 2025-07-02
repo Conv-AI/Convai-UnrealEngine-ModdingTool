@@ -4,6 +4,7 @@ import shutil
 import requests
 import time
 import gdown
+from urllib.parse import unquote
 
 from core.config_manager import config
 from core.file_utility_manager import FileUtilityManager
@@ -42,7 +43,7 @@ class DownloadManager:
 
     @staticmethod
     def download_plugins_from_gdrive_folder(folder_id, project_dir):   
-        download_dir = os.path.join(project_dir, "ConvaiEssentials")
+        download_dir = os.path.join(project_dir, config.get_essentials_dir_name())
         os.makedirs(download_dir, exist_ok=True)
         url = f"https://drive.google.com/drive/folders/{folder_id}"
         gdown.download_folder(url, output=download_dir, use_cookies=False, quiet=True)
@@ -80,7 +81,7 @@ class DownloadManager:
     def download_and_extract_plugin(project_dir):
         """Download and extract ConvaiPakManager plugin into ProjectDir/Plugins/."""
         file_id = config.get_google_drive_id("convai_pak_manager_plugin")
-        download_dir = os.path.join(project_dir, "ConvaiEssentials")
+        download_dir = os.path.join(project_dir, config.get_essentials_dir_name())
         filename = "ConvaiPakManagerPlugin.zip"
 
         downloaded_file = DownloadManager.download_from_gdrive(file_id, download_dir, filename)
@@ -220,7 +221,7 @@ class DownloadManager:
         """
         try:
             github_manager = GitHubManager()
-            download_dir = os.path.join(project_dir, "ConvaiEssentials")
+            download_dir = os.path.join(project_dir, config.get_essentials_dir_name())
             
             repo = config.get_github_repo(plugin_name)
             asset_patterns = config.get_github_asset_patterns(plugin_name)
@@ -289,8 +290,8 @@ class DownloadManager:
         
     @staticmethod
     def download_convai_realusion_content(project_dir):
-        DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_reallusion_content"), os.path.join(project_dir, "ConvaiEssentials"), "ConvaiRealusionContent.zip")
-        FileUtilityManager.unzip(os.path.join(project_dir, "ConvaiEssentials", "ConvaiRealusionContent.zip"), os.path.join(project_dir))
+        DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_reallusion_content"), os.path.join(project_dir, config.get_essentials_dir_name()), "ConvaiRealusionContent.zip")
+        FileUtilityManager.unzip(os.path.join(project_dir, config.get_essentials_dir_name(), "ConvaiRealusionContent.zip"), os.path.join(project_dir))
 
     @staticmethod
     def extract_content_pack(zip_path, project_dir):
