@@ -64,37 +64,19 @@ class UnrealEngineManager:
         ]
         logger.info("Starting project compilation...")
         
-        # Capture output to reduce verbosity
-        result = subprocess.run(
-            cmd, 
-            shell=True, 
-            capture_output=True, 
-            text=True,
-            encoding='utf-8'
-        )
+        # Run compilation with live output streaming (just like original)
+        result = subprocess.run(cmd, shell=True)
         
+        # Final status
         if result.returncode != 0:
             logger.error("Compilation failed")
-            # Show key error information
-            if result.stderr:
-                error_lines = result.stderr.strip().split('\n')
-                # Show only the last few lines of stderr which usually contain the actual error
-                for line in error_lines[-5:]:
-                    if line.strip():
-                        logger.error(line.strip())
         else:
             logger.success("Compilation completed successfully")
-            # Show any important warnings (but not all the verbose output)
-            if result.stdout:
-                lines = result.stdout.split('\n')
-                for line in lines:
-                    if 'warning' in line.lower() and 'deprecated' not in line.lower():
-                        logger.debug(line.strip())
-                        
-        # Log file information
+            
+        # Log file information for detailed troubleshooting
         log_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'UnrealBuildTool', 'Log.txt')
         if os.path.exists(log_file):
-            logger.debug(f"Full build log available at: {log_file}")
+            logger.info(f"Full build log also available at: {log_file}")
 
     def enable_plugins(self, plugins: list[str]) -> None:
         uproject_path = os.path.join(self.project_dir, f"{self.project_name}.uproject")
