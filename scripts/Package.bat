@@ -5,10 +5,10 @@ REM Path to your Python script
 set SCRIPT_NAME=ConvaiModdingTool.py
 
 REM Desired output EXE name
-set EXE_NAME=UploaderTool
+set EXE_NAME=AssetUploaderTool
 
 REM Icon file (must be .ico)
-set ICON_FILE=Convai.ico
+set ICON_FILE=resources/Convai.ico
 
 REM Run PyInstaller
 pyinstaller %SCRIPT_NAME% --onefile --icon=%ICON_FILE% --name=%EXE_NAME%
