@@ -1,5 +1,13 @@
 {
-    "current-ue-version" : "5.5",
-    "target-ue-version" : "5.5",
-    "modding-tool-version" : "1.0.0"
+    "unreal-engine": {
+        "windows": {
+            "should-package": true,
+            "configuration": "Shipping"
+        },
+        "linux": {
+            "should-package": true,
+            "configuration": "Development"
+        }
+    },
+    "raw-project-upload": true
 }
