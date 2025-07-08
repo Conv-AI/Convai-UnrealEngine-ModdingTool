@@ -9,6 +9,7 @@ import json
 import uuid
 import zipfile
 import subprocess
+import xml.etree.ElementTree as ET
 from typing import Dict, Any
 
 from core.logger import logger
@@ -273,3 +274,177 @@ class FileUtilityManager:
         except Exception as e:
             logger.error(f"Unexpected error reading metadata: {e}")
             return {}
+
+    @staticmethod
+    def read_appdata_file(file_path: str) -> str:
+        """
+        Read a file from the user's AppData/Roaming directory.
+        
+        Args:
+            file_path (str): Relative path from %APPDATA% directory
+            
+        Returns:
+            str: File content as string
+            
+        Raises:
+            FileNotFoundError: If the file doesn't exist
+            PermissionError: If the file can't be read
+            UnicodeDecodeError: If the file contains invalid UTF-8
+        """
+        appdata_path = os.environ.get('APPDATA')
+        if not appdata_path:
+            raise EnvironmentError("APPDATA environment variable not found")
+        
+        full_path = os.path.join(appdata_path, file_path)
+        
+        if not os.path.exists(full_path):
+            raise FileNotFoundError(f"File not found: {full_path}")
+        
+        try:
+            with open(full_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+            logger.debug(f"Successfully read file: {full_path}")
+            return content
+        except PermissionError:
+            logger.error(f"Permission denied reading file: {full_path}")
+            raise
+        except UnicodeDecodeError:
+            logger.error(f"Invalid UTF-8 encoding in file: {full_path}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error reading file {full_path}: {e}")
+            raise
+
+    @staticmethod
+    def read_ubt_build_configuration() -> Dict[str, Any]:
+        """
+        Read and parse the Unreal Build Tool configuration file.
+        
+        Returns:
+            Dict[str, Any]: Parsed configuration as a dictionary
+            
+        Raises:
+            FileNotFoundError: If BuildConfiguration.xml doesn't exist
+            Exception: If XML parsing fails
+        """
+        config_path = config.get_ubt_config_appdata_path()
+        
+        try:
+            xml_content = FileUtilityManager.read_appdata_file(config_path)
+            
+            # Parse the XML content
+            root = ET.fromstring(xml_content)
+            
+            # Handle namespace if present
+            namespace = ''
+            expected_namespace = config.get_ubt_xml_namespace()
+            if root.tag.startswith('{'):
+                namespace = root.tag[root.tag.find("{")+1:root.tag.find("}")]
+            
+            # Convert XML to dictionary for easier access
+            config_dict = {}
+            
+            # Look for BuildConfiguration element within the root Configuration
+            config_element_name = config.get_ubt_xml_config_element()
+            build_config_element = root.find(f'.//{config_element_name}' if not namespace else f'.//{{{namespace}}}{config_element_name}')
+            
+            if build_config_element is not None:
+                # Extract all child elements of BuildConfiguration
+                for elem in build_config_element:
+                    # Remove namespace from tag name for cleaner keys
+                    tag_name = elem.tag
+                    if namespace and tag_name.startswith(f'{{{namespace}}}'):
+                        tag_name = tag_name.replace(f'{{{namespace}}}', '')
+                    
+                    if elem.text and elem.text.strip():
+                        config_dict[tag_name] = elem.text.strip()
+            else:
+                # Fallback: look for direct children of root (for simpler XML structures)
+                for elem in root:
+                    tag_name = elem.tag
+                    if namespace and tag_name.startswith(f'{{{namespace}}}'):
+                        tag_name = tag_name.replace(f'{{{namespace}}}', '')
+                    
+                    if elem.text and elem.text.strip():
+                        config_dict[tag_name] = elem.text.strip()
+            
+            logger.debug(f"Successfully parsed UBT configuration with {len(config_dict)} settings")
+            return config_dict
+            
+        except FileNotFoundError:
+            logger.error(f"BuildConfiguration.xml not found in AppData. Expected location: %APPDATA%/{config_path}")
+            raise
+        except ET.ParseError as e:
+            logger.error(f"Failed to parse BuildConfiguration.xml: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error reading UBT configuration: {e}")
+            raise
+
+    @staticmethod
+    def validate_ubt_configuration() -> bool:
+        """
+        Validate that the UBT configuration has the required settings.
+        Checks all required settings defined in the configuration.
+        
+        Returns:
+            bool: True if configuration is valid, False otherwise
+            
+        Raises:
+            SystemExit: If prerequisite is not met
+        """
+        try:
+            config_dict = FileUtilityManager.read_ubt_build_configuration()
+            required_settings = config.get_ubt_required_settings()
+            
+            # Check all required settings
+            missing_or_incorrect = []
+            for setting_name, expected_value in required_settings.items():
+                actual_value = config_dict.get(setting_name, '').lower()
+                expected_value_lower = expected_value.lower()
+                
+                if actual_value != expected_value_lower:
+                    missing_or_incorrect.append((setting_name, expected_value))
+            
+            if missing_or_incorrect:
+                logger.error("PREREQUISITE NOT MET: UBT configuration has missing or incorrect settings:")
+                for setting_name, expected_value in missing_or_incorrect:
+                    logger.error(f"  - {setting_name} must be set to '{expected_value}'")
+                
+                logger.error("Please add the following to your BuildConfiguration.xml file:")
+                FileUtilityManager._log_ubt_xml_template(required_settings)
+                logger.error(f"File location: %APPDATA%/{config.get_ubt_config_appdata_path()}")
+                raise SystemExit("Tool cannot continue without proper UBT configuration")
+            
+            return True
+            
+        except FileNotFoundError:
+            logger.error("PREREQUISITE NOT MET: BuildConfiguration.xml not found")
+            logger.error(f"Please create BuildConfiguration.xml in %APPDATA%/{config.get_ubt_config_appdata_path()} with the following content:")
+            FileUtilityManager._log_ubt_xml_template(config.get_ubt_required_settings())
+            raise SystemExit("Tool cannot continue without proper UBT configuration")
+        except Exception as e:
+            logger.error(f"Failed to validate UBT configuration: {e}")
+            raise SystemExit("Tool cannot continue due to UBT configuration validation error")
+    
+    @staticmethod
+    def _log_ubt_xml_template(settings: Dict[str, str]):
+        """
+        Log the UBT XML template with the given settings.
+        
+        Args:
+            settings: Dictionary of setting names and their values
+        """
+        namespace = config.get_ubt_xml_namespace()
+        root_element = config.get_ubt_xml_root_element()
+        config_element = config.get_ubt_xml_config_element()
+        
+        logger.error("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
+        logger.error(f"<{root_element} xmlns=\"{namespace}\">")
+        logger.error(f"    <{config_element}>")
+        
+        for setting_name, value in settings.items():
+            logger.error(f"        <{setting_name}>{value}</{setting_name}>")
+        
+        logger.error(f"    </{config_element}>")
+        logger.error(f"</{root_element}>")

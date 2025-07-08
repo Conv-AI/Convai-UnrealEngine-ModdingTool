@@ -22,6 +22,8 @@ def CreateModdingProject():
     """Main execution flow for setting up an Unreal Engine project."""  
     logger.section("Creating New Modding Project")
 
+    FileUtilityManager.validate_ubt_configuration()
+
     ue_dir = input_manager.get_unreal_engine_path()
     project_name = input_manager.get_project_name()
     project_dir = os.path.join(input_manager.get_script_dir(), project_name)
@@ -70,6 +72,8 @@ def CreateModdingProject():
 def UpdateModdingProject():
     """Main execution flow for updating an existing Unreal Engine modding project."""
     logger.section("Updating Existing Modding Project")
+    
+    FileUtilityManager.validate_ubt_configuration()
     
     ue_dir = input_manager.get_unreal_engine_path()
     project_dir = input_manager.choose_project_dir()

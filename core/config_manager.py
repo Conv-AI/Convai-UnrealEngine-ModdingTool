@@ -84,6 +84,17 @@ class ConfigManager:
         "unreal_paths": {
             "engine_binary": "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe",
             "version_file": "Engine/Source/Runtime/Launch/Resources/Version.h"
+        },
+        "ubt_configuration": {
+            "appdata_path": "Unreal Engine/UnrealBuildTool/BuildConfiguration.xml",
+            "xml_namespace": "https://www.unrealengine.com/BuildConfiguration",
+            "required_settings": {
+                "bAllowUBALocalExecutor": "false"
+            },
+            "xml_template": {
+                "root_element": "Configuration",
+                "config_element": "BuildConfiguration"
+            }
         }
     }
     
@@ -224,8 +235,29 @@ class ConfigManager:
         return self.get('unreal_paths.engine_binary', 'Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe')
     
     def get_version_file_path(self) -> str:
-        """Get Unreal Engine version file path."""
+        """Get version file path relative to engine directory."""
         return self.get('unreal_paths.version_file', 'Engine/Source/Runtime/Launch/Resources/Version.h')
+    
+    # UBT Configuration getters
+    def get_ubt_config_appdata_path(self) -> str:
+        """Get UBT BuildConfiguration.xml path relative to AppData."""
+        return self.get('ubt_configuration.appdata_path', 'Unreal Engine/UnrealBuildTool/BuildConfiguration.xml')
+    
+    def get_ubt_xml_namespace(self) -> str:
+        """Get UBT XML namespace."""
+        return self.get('ubt_configuration.xml_namespace', 'https://www.unrealengine.com/BuildConfiguration')
+    
+    def get_ubt_required_settings(self) -> Dict[str, str]:
+        """Get UBT required settings and their expected values."""
+        return self.get('ubt_configuration.required_settings', {'bAllowUBALocalExecutor': 'false'})
+    
+    def get_ubt_xml_root_element(self) -> str:
+        """Get UBT XML root element name."""
+        return self.get('ubt_configuration.xml_template.root_element', 'Configuration')
+    
+    def get_ubt_xml_config_element(self) -> str:
+        """Get UBT XML configuration element name."""
+        return self.get('ubt_configuration.xml_template.config_element', 'BuildConfiguration')
 
 # Singleton instance
 config = ConfigManager() 
