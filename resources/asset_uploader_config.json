@@ -5,8 +5,8 @@
             "configuration": "Shipping"
         },
         "linux": {
-            "should-package": false,
-            "configuration": "Development"
+            "should-package": true,
+            "configuration": "Shipping"
         }
     },
     "raw-project-upload": true
