@@ -1,5 +1,6 @@
 import os
 import msvcrt
+import winreg
 from pathlib import Path
 import re
 
@@ -12,13 +13,37 @@ class InputManager:
         self.script_dir = Path(script_dir)
         self.default_engine_paths = default_engine_paths or []
         self._existing_projects = None
-
-        # Cached inputs
         self.project_name = None
         self.convai_api_key = None
         self.asset_type = None
         self.is_metahuman = None
         self.unreal_engine_path = None
+
+    @staticmethod
+    def _find_registry_engines():
+        engines = []
+        reg_path = r"SOFTWARE\\EpicGames\\Unreal Engine"  # ← raw string avoids the \U error
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                reg_path,
+                0,
+                winreg.KEY_READ | winreg.KEY_WOW64_64KEY
+            ) as base_key:
+                i = 0
+                while True:
+                    try:
+                        version = winreg.EnumKey(base_key, i)
+                        with winreg.OpenKey(base_key, version) as subkey:
+                            install_dir, _ = winreg.QueryValueEx(subkey, "InstalledDirectory")
+                            engines.append((version, install_dir))
+                        i += 1
+                    except OSError:
+                        break
+        except FileNotFoundError:
+            # Key doesn’t exist on this machine
+            pass
+        return engines
 
     def get_script_dir(self) -> str:
         return self.script_dir
@@ -65,23 +90,27 @@ class InputManager:
     def get_unreal_engine_path(self) -> str:
         if self.unreal_engine_path:
             return self.unreal_engine_path
-        for default in self.default_engine_paths:
-            path_obj = Path(default)
+
+        # 1) Try the registry
+        for version, path_str in self._find_registry_engines():
+            path_obj = Path(path_str)
             if UnrealEngineManager.is_valid_engine_path(path_obj):
-                resp = input(f'Found valid Unreal Engine path: {path_obj}\nUse this? (Y/N): ').strip().lower()
-                if resp in ('', 'y', 'yes'):
+                resp = input(f"Found Unreal Engine {version} at:  {path_obj}\nUse this? [Y/N]: ").strip().lower()
+                if resp in ("", "y", "yes"):
                     self.unreal_engine_path = str(path_obj)
                     return self.unreal_engine_path
+
+        # 2) Last resort: ask the user
         while True:
             current_version = config.get_unreal_engine_version()
-            user_input = input(f'Enter the Unreal Engine {current_version} installation directory: ').strip()
+            user_input = input(f"Enter the Unreal Engine {current_version} installation directory: ").strip()
             engine_path = Path(user_input)
             if UnrealEngineManager.is_valid_engine_path(engine_path):
-                print(f'Using Unreal Engine path: {engine_path}')
+                print(f"Using Unreal Engine path: {engine_path}")
                 self.unreal_engine_path = str(engine_path)
                 return self.unreal_engine_path
-            print(f'Invalid path. Please enter a valid Unreal Engine {current_version} directory.')
-
+            print(f"Invalid path. Please enter a valid Unreal Engine {current_version} directory.")
+    
     def get_project_name(self) -> str:
         if self.project_name:
             return self.project_name
@@ -152,7 +181,7 @@ class InputManager:
             return self.asset_type, self.is_metahuman
         while True:
             print('Select the type of asset you want to create:')
-            print('1. Scene')
+            print('1. Scene (Coming soon)')
             print('2. Avatar')
             choice = input('Enter your choice (1 or 2): ').strip()
             if choice == '1':
