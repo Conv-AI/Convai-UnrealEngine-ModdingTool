@@ -8,7 +8,6 @@ import shutil
 import json
 import uuid
 import zipfile
-import subprocess
 import xml.etree.ElementTree as ET
 from typing import Dict, Any
 
@@ -407,20 +406,36 @@ class FileUtilityManager:
                     missing_or_incorrect.append((setting_name, expected_value))
             
             if missing_or_incorrect:
-                logger.error("PREREQUISITE NOT MET: UBT configuration has missing or incorrect settings:")
-                for setting_name, expected_value in missing_or_incorrect:
-                    logger.error(f"  - {setting_name} must be set to '{expected_value}'")
-                
-                logger.error("Please add the following to your BuildConfiguration.xml file:")
+                logger.warning("UBT configuration has missing or incorrect settings. Attempting auto-fix...")
+                if FileUtilityManager.ensure_ubt_configuration_correct():
+                    # Re-validate after auto-fix
+                    config_dict = FileUtilityManager.read_ubt_build_configuration()
+                    missing_or_incorrect = []
+                    for setting_name, expected_value in required_settings.items():
+                        actual_value = config_dict.get(setting_name, '').lower()
+                        if actual_value != expected_value.lower():
+                            missing_or_incorrect.append((setting_name, expected_value))
+                    if not missing_or_incorrect:
+                        logger.success("UBT configuration auto-fix applied successfully")
+                        return True
+                # If auto-fix failed, guide user and exit
+                logger.error("PREREQUISITE NOT MET: Failed to auto-fix UBT configuration. Please ensure the following settings exist:")
+                for setting_name, expected_value in required_settings.items():
+                    logger.error(f"  - {setting_name} = {expected_value}")
+                logger.error("Expected BuildConfiguration.xml template:")
                 FileUtilityManager._log_ubt_xml_template(required_settings)
-                logger.error(f"File location: %APPDATA%/{config.get_ubt_config_appdata_path()}")
+                logger.error(f"File location: {os.environ.get('APPDATA')}/{config.get_ubt_config_appdata_path()}")
                 raise SystemExit("Tool cannot continue without proper UBT configuration")
             
             return True
             
         except FileNotFoundError:
-            logger.error("PREREQUISITE NOT MET: BuildConfiguration.xml not found")
-            logger.error(f"Please create BuildConfiguration.xml in %APPDATA%/{config.get_ubt_config_appdata_path()} with the following content:")
+            logger.warning("BuildConfiguration.xml not found. Attempting to create it...")
+            if FileUtilityManager.ensure_ubt_configuration_correct():
+                logger.success("Created default UBT BuildConfiguration.xml")
+                return True
+            logger.error("PREREQUISITE NOT MET: Could not create BuildConfiguration.xml automatically")
+            logger.error(f"Please create BuildConfiguration.xml in {os.environ.get('APPDATA')}/{config.get_ubt_config_appdata_path()} with the following content:")
             FileUtilityManager._log_ubt_xml_template(config.get_ubt_required_settings())
             raise SystemExit("Tool cannot continue without proper UBT configuration")
         except Exception as e:
@@ -448,3 +463,88 @@ class FileUtilityManager:
         
         logger.error(f"    </{config_element}>")
         logger.error(f"</{root_element}>")
+
+    @staticmethod
+    def _get_ubt_full_path() -> str:
+        """
+        Resolve the full path to %APPDATA%/.../BuildConfiguration.xml from config.
+        """
+        appdata_path = os.environ.get('APPDATA')
+        if not appdata_path:
+            raise EnvironmentError("APPDATA environment variable not found")
+        return os.path.join(appdata_path, config.get_ubt_config_appdata_path())
+
+    @staticmethod
+    def ensure_ubt_configuration_correct() -> bool:
+        """
+        Ensure BuildConfiguration.xml exists and contains required settings with expected values.
+        Non-destructively creates or updates only the needed elements under BuildConfiguration.
+        """
+        required_settings = config.get_ubt_required_settings()
+        return FileUtilityManager.update_ubt_build_configuration_settings(required_settings)
+
+    @staticmethod
+    def update_ubt_build_configuration_settings(settings: Dict[str, str]) -> bool:
+        """
+        Update or create BuildConfiguration.xml, preserving existing content and adding/updating
+        only the provided settings inside the BuildConfiguration element under the root Configuration.
+        """
+        try:
+            full_path = FileUtilityManager._get_ubt_full_path()
+            directory = os.path.dirname(full_path)
+            os.makedirs(directory, exist_ok=True)
+
+            # Try to load existing XML; if not present, create minimal structure
+            root = None
+            namespace = None
+            root_element_name = config.get_ubt_xml_root_element()
+            config_element_name = config.get_ubt_xml_config_element()
+            expected_namespace = config.get_ubt_xml_namespace()
+
+            if os.path.exists(full_path):
+                try:
+                    tree = ET.parse(full_path)
+                    root = tree.getroot()
+                    if root.tag.startswith('{'):
+                        namespace = root.tag[root.tag.find('{')+1:root.tag.find('}')]
+                except Exception:
+                    root = None  # Fall back to creating a new tree
+
+            if root is None:
+                # Create new root with default namespace
+                ET.register_namespace('', expected_namespace)
+                root = ET.Element(f"{{{expected_namespace}}}{root_element_name}")
+                namespace = expected_namespace
+                tree = ET.ElementTree(root)
+            else:
+                # Ensure namespace registration to avoid ns0 prefixes on write
+                if namespace:
+                    ET.register_namespace('', namespace)
+                else:
+                    # If no namespace, still register expected to keep tags clean if we add new ones
+                    ET.register_namespace('', expected_namespace)
+
+            # Helper to build qualified names
+            def qname(name: str) -> str:
+                ns = namespace if namespace else None
+                return f"{{{ns}}}{name}" if ns else name
+
+            # Find or create BuildConfiguration element
+            build_config = root.find(qname(config_element_name))
+            if build_config is None:
+                build_config = ET.SubElement(root, qname(config_element_name))
+
+            # For each desired setting, add or update element text
+            for key, value in settings.items():
+                child = build_config.find(qname(key))
+                if child is None:
+                    child = ET.SubElement(build_config, qname(key))
+                child.text = str(value)
+
+            # Write back to disk
+            tree.write(full_path, encoding='utf-8', xml_declaration=True)
+            logger.debug(f"Updated UBT configuration (non-destructive) at: {full_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update UBT BuildConfiguration.xml: {e}")
+            return False
