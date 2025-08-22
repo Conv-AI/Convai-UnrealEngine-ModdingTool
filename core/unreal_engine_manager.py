@@ -106,10 +106,10 @@ class UnrealEngineManager:
             json.dump(data, f, indent=4)
         logger.debug(f"Created content plugin: {plugin_name}")
 
-    def update_ini_files(self, plugin_name: str, api_key: str) -> None:
+    def update_ini_files(self, plugin_name: str, api_key: str, is_metahuman:bool=False) -> None:
         logger.debug("Updating project configuration files...")
         self._update_game_ini(self.project_dir, plugin_name)
-        self._update_engine_ini(self.project_dir, api_key)
+        self._update_engine_ini(self.project_dir, api_key, is_metahuman)
         self._update_input_ini(self.project_dir)
 
     def update_modding_dependencies(self) -> None:
@@ -411,7 +411,7 @@ MetaDataTagsForAssetRegistry=()
         logger.debug(f"Updated DefaultGame.ini with plugin: {plugin_name}")
 
     @staticmethod
-    def _update_engine_ini(project_dir, convai_api_key):
+    def _update_engine_ini(project_dir, convai_api_key, is_metahuman:bool = False):
         """
         Appends the Convai API key to the DefaultEngine.ini file in the project's Config directory.
 
@@ -431,6 +431,14 @@ GlobalDefaultGameMode=/Game/ConvaiConveniencePack/Sample/BP_SampleGameMode.BP_Sa
 
 [/Script/Convai.ConvaiSettings]
 API_Key={convai_api_key}
+"""
+        if is_metahuman:
+            lines_to_add += """
+[/Script/Engine.RendererSettings]
+r.GPUSkin.Support16BitBoneIndex=True
+r.GPUSkin.UnlimitedBoneInfluences=True
+r.SkinCache.CompileShaders=True
+SkeletalMesh.UseExperimentalChunking=1
 """
         with open(default_engine_ini_path, "a", encoding="utf-8") as file:
             file.write(lines_to_add.strip() + "\n")

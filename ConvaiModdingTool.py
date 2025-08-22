@@ -43,7 +43,7 @@ def CreateModdingProject():
     logger.step("Creating content plugin...")
     plugin_name = FileUtilityManager.trim_unique_str(FileUtilityManager.generate_unique_str())
     ue_manager.create_content_only_plugin(plugin_name)
-    ue_manager.update_ini_files(plugin_name, convai_api_key)
+    ue_manager.update_ini_files(plugin_name, convai_api_key, is_metahuman)
     
     logger.step("Downloading Convai dependencies...")
     DownloadManager.download_modding_dependencies(project_dir)
