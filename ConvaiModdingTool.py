@@ -49,7 +49,7 @@ def CreateModdingProject():
     DownloadManager.download_modding_dependencies(project_dir)
     
     logger.step("Enabling required plugins...")
-    required_plugins = config.get_required_plugins() + [plugin_name]
+    required_plugins = (config.get_required_plugins() + [plugin_name] + (config.get_metahuman_plugins() if is_metahuman else []))
     ue_manager.enable_plugins(required_plugins)
     
     logger.step("Saving project metadata...")

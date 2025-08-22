@@ -50,6 +50,10 @@ class ConfigManager:
                 "ConvaiHTTP", 
                 "ConvaiPakManager",
                 "JsonBlueprintUtilities"
+            ],
+            "metahuman_plugins": [
+                "LiveLinkControlRig",
+                "AppleARKitFaceSupport",
             ]
         },
         "directory_names": {
@@ -165,6 +169,10 @@ class ConfigManager:
     def get_required_plugins(self) -> List[str]:
         """Get list of required plugins."""
         return self.get('project_settings.required_plugins', [])
+    
+    def get_metahuman_plugins(self) -> List[str]:
+        """Get list of required plugins."""
+        return self.get('project_settings.metahuman_plugins', [])
     
     def get_max_project_name_length(self) -> int:
         """Get maximum allowed project name length."""
