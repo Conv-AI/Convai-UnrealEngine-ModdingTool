@@ -8,6 +8,9 @@ from core.file_utility_manager import FileUtilityManager
 from core.input_manager import InputManager
 from core.unreal_engine_manager import UnrealEngineManager
 from core.logger import logger, suppress_external_logging
+from core.version_manager import VersionManager
+
+TOOL_VERSION = "2.4.0"
 
 def get_script_dir():
     if getattr(sys, 'frozen', False):
@@ -105,6 +108,10 @@ def UpdateModdingProject():
     logger.success("Modding project updated successfully!")
 
 def main():
+    
+    if not VersionManager.check_version(TOOL_VERSION):
+        return
+    
     suppress_external_logging()
     
     logger.section("Convai Modding Tool")
@@ -116,8 +123,7 @@ def main():
         CreateModdingProject()
     elif user_choice == "update":
         UpdateModdingProject()
-    
-    input("\nPress Enter to exit...")
 
 if __name__ == "__main__":
     main()
+    input("\nPress Enter to exit...")

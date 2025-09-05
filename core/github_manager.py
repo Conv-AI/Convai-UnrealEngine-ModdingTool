@@ -3,7 +3,8 @@ import requests
 import os
 import time
 from typing import Dict, List, Optional
-
+import base64
+        
 from core.config_manager import config
 from core.logger import logger
 
@@ -187,3 +188,22 @@ class GitHubManager:
         else:
             logger.error(f"Failed to download {asset_name}")
             return None 
+    
+    @staticmethod
+    def get_file_content(repo: str, branch: str, file_path: str, max_retries: int = 3) -> Optional[str]:
+        api_url = f"https://api.github.com/repos/{repo}/contents/{file_path}?ref={branch}"
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(api_url, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+
+                if data.get("encoding") == "base64":
+                    return base64.b64decode(data["content"]).decode("utf-8")
+                return data.get("content")
+            except requests.RequestException as e:
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+
+        return None
