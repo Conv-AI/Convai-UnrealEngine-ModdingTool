@@ -57,25 +57,64 @@ class DownloadManager:
     def extract_plugin_zip(zip_path, project_dir):
         plugins_dir = os.path.join(project_dir, "Plugins")
         os.makedirs(plugins_dir, exist_ok=True)
+
         temp_dir = os.path.join(plugins_dir, "Temp_Extract_Plugin")
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
         os.makedirs(temp_dir, exist_ok=True)
+
+        logger.debug(f"Unzipping plugin archive: {os.path.basename(zip_path)}")
         FileUtilityManager.unzip(zip_path, temp_dir)
+
+        # Find a directory that contains a .uplugin file and capture its name
         plugin_folder = None
+        uplugin_path = None
+        uplugin_name_no_ext = None
         for root, _, files in os.walk(temp_dir):
-            if any(f.endswith(".uplugin") for f in files):
-                plugin_folder = root
+            for f in files:
+                if f.endswith(".uplugin"):
+                    plugin_folder = root
+                    uplugin_path = os.path.join(root, f)
+                    uplugin_name_no_ext = os.path.splitext(f)[0]
+                    break
+            if plugin_folder:
                 break
-        if not plugin_folder:
+
+        if not plugin_folder or not uplugin_path:
+            logger.error("No .uplugin file found in extracted archive")
             shutil.rmtree(temp_dir, ignore_errors=True)
             return None
-        final_plugin_path = os.path.join(plugins_dir, os.path.basename(plugin_folder))
+
+        # Decide final folder name from .uplugin (more reliable than inner folder names)
+        final_plugin_folder_name = uplugin_name_no_ext or os.path.basename(plugin_folder)
+        final_plugin_path = os.path.join(plugins_dir, final_plugin_folder_name)
+
+        logger.debug(f"Detected plugin folder: {plugin_folder}")
+        logger.debug(f"Detected plugin descriptor: {os.path.basename(uplugin_path)}")
+        logger.debug(f"Installing plugin to: {final_plugin_path}")
+
+        # Remove existing installation if present
         if os.path.exists(final_plugin_path):
             shutil.rmtree(final_plugin_path, ignore_errors=True)
-        shutil.move(plugin_folder, final_plugin_path)
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        return final_plugin_path
+
+        try:
+            # If the .uplugin is at the zip root (plugin_folder == temp_dir),
+            # move the contents of temp_dir into final_plugin_path (not the temp dir itself)
+            if os.path.normpath(plugin_folder) == os.path.normpath(temp_dir):
+                os.makedirs(final_plugin_path, exist_ok=True)
+                for item in os.listdir(temp_dir):
+                    src_path = os.path.join(temp_dir, item)
+                    dst_path = os.path.join(final_plugin_path, item)
+                    shutil.move(src_path, dst_path)
+            else:
+                # Otherwise move the detected plugin folder as a whole
+                shutil.move(plugin_folder, final_plugin_path)
+
+            logger.debug(f"Plugin installed: {final_plugin_folder_name}")
+            return final_plugin_path
+        finally:
+            # Cleanup temporary extraction directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     @staticmethod
     def download_and_extract_plugin(project_dir):
