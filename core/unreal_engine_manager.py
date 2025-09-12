@@ -413,7 +413,8 @@ MetaDataTagsForAssetRegistry=()
     @staticmethod
     def _update_engine_ini(project_dir, convai_api_key):
         """
-        Appends the Convai API key to the DefaultEngine.ini file in the project's Config directory.
+        Ensures required settings exist in DefaultEngine.ini by overriding existing scalar keys
+        and de-duplicating array-style (+/-) entries within their sections.
 
         Args:
             project_dir (str): The path to your Unreal project directory.
@@ -424,7 +425,7 @@ MetaDataTagsForAssetRegistry=()
 
         default_engine_ini_path = os.path.join(config_dir, config.get_config_file_name("default_engine"))
 
-        # Lines to append
+        # Desired settings content (by section)
         lines_to_add = f"""
 [/Script/EngineSettings.GameMapsSettings]
 GlobalDefaultGameMode=/Game/ConvaiConveniencePack/Sample/BP_SampleGameMode.BP_SampleGameMode_C
@@ -632,10 +633,125 @@ MinimumiOSVersion=IOS_16
 [/Script/Convai.ConvaiSettings]
 API_Key={convai_api_key}
 """
+        
+        def parse_sections(raw: str):
+            sections = {}
+            current = None
+            for raw_line in raw.splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if line.startswith("[") and line.endswith("]"):
+                    current = line
+                    sections.setdefault(current, [])
+                else:
+                    if current is None:
+                        # Skip lines before any section header
+                        continue
+                    sections[current].append(line)
+            return sections
 
-        with open(default_engine_ini_path, "a", encoding="utf-8") as file:
-            file.write(lines_to_add.strip() + "\n")
-        logger.debug("Updated DefaultEngine.ini with API key")
+        def extract_key(line: str):
+            # Handles lines like `Key=Value`, `+Key=Value`, `-Key=Value`
+            op = None
+            rest = line
+            if line and line[0] in ['+', '-']:
+                op = line[0]
+                rest = line[1:]
+            if '=' in rest:
+                key = rest.split('=', 1)[0].strip()
+            else:
+                key = rest.strip()
+            return op, key
+
+        # Load existing ini (if present) and parse into sections preserving unknown content
+        existing_sections = {}
+        if os.path.exists(default_engine_ini_path):
+            try:
+                with open(default_engine_ini_path, 'r', encoding='utf-8') as f:
+                    current = None
+                    for raw_line in f.read().splitlines():
+                        line = raw_line.rstrip('\n')
+                        if not line.strip():
+                            # Preserve blank lines inside a section to keep readability
+                            if current is not None:
+                                existing_sections.setdefault(current, []).append("")
+                            continue
+                        if line.strip().startswith('[') and line.strip().endswith(']'):
+                            current = line.strip()
+                            existing_sections.setdefault(current, [])
+                        else:
+                            if current is None:
+                                # Skip lines before first header
+                                continue
+                            existing_sections.setdefault(current, []).append(line.strip())
+            except Exception as e:
+                logger.warn(f"Failed to read existing DefaultEngine.ini, will recreate: {e}")
+                existing_sections = {}
+
+        desired_sections = parse_sections(lines_to_add)
+
+        # Merge desired into existing
+        for section, desired_lines in desired_sections.items():
+            existing_lines = existing_sections.get(section, [])
+
+            # Build maps for fast replacement of scalar keys
+            # For scalars (no +/-), we will remove any lines with the same key and then add ours once.
+            to_add_after_cleanup = []
+            for dline in desired_lines:
+                op, key = extract_key(dline)
+                if op is None:
+                    # Remove any existing lines that define the same scalar key (with or without +/- just in case)
+                    new_existing = []
+                    for eline in existing_lines:
+                        eop, ekey = extract_key(eline.strip())
+                        if ekey == key and eop is None:
+                            # Drop conflicting scalar definition
+                            continue
+                        new_existing.append(eline)
+                    existing_lines = new_existing
+                    to_add_after_cleanup.append(dline)
+                else:
+                    # Array-style entries: ensure our exact line exists once; de-duplicate identical lines.
+                    # Remove duplicate occurrences of the exact same line first
+                    existing_lines = [eline for eline in existing_lines if eline.strip() != dline]
+                    # Then append our desired entry
+                    to_add_after_cleanup.append(dline)
+
+            # After processing all desired lines, append them back preserving order
+            # Also remove accidental duplicates among to_add_after_cleanup while preserving order
+            seen = set()
+            unique_to_add = []
+            for line in to_add_after_cleanup:
+                if line not in seen:
+                    unique_to_add.append(line)
+                    seen.add(line)
+
+            # Rebuild section: keep other existing lines (including comments/blank) and append our desired ones at the end
+            existing_lines.extend(unique_to_add)
+            existing_sections[section] = existing_lines
+
+        # Write back the merged INI
+        # Keep section order: existing first, then any new desired sections not present
+        section_order = list(existing_sections.keys())
+        for sec in desired_sections.keys():
+            if sec not in section_order:
+                section_order.append(sec)
+
+        with open(default_engine_ini_path, 'w', encoding='utf-8') as f:
+            first = True
+            for sec in section_order:
+                if not first:
+                    f.write("\n")
+                first = False
+                f.write(f"{sec}\n")
+                for line in existing_sections.get(sec, []):
+                    if line == "":
+                        f.write("\n")
+                    else:
+                        f.write(f"{line}\n")
+
+        logger.debug("Merged DefaultEngine.ini with required settings and API key")
     
     @staticmethod
     def _update_input_ini(project_dir):
