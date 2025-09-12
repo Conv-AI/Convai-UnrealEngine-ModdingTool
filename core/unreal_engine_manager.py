@@ -21,6 +21,129 @@ class UnrealEngineManager:
         self.project_dir = project_dir
         self.engine_version = UnrealEngineManager._extract_engine_version(ue_dir)
         
+    @staticmethod
+    def _parse_ini_sections(raw: str):
+        sections = {}
+        current = None
+        for raw_line in raw.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                current = line
+                sections.setdefault(current, [])
+            else:
+                if current is None:
+                    # Skip lines before any section header
+                    continue
+                sections[current].append(line)
+        return sections
+
+    @staticmethod
+    def _extract_ini_key(line: str):
+        # Handles lines like `Key=Value`, `+Key=Value`, `-Key=Value`
+        op = None
+        rest = line
+        if line and line[0] in ['+', '-']:
+            op = line[0]
+            rest = line[1:]
+        if '=' in rest:
+            key = rest.split('=', 1)[0].strip()
+        else:
+            key = rest.strip()
+        return op, key
+
+    @staticmethod
+    def _merge_ini_file(target_path: str, desired_content: str, not_found_warning: str):
+        """
+        Merge desired INI content into an existing INI file at target_path.
+        - Overrides scalar keys
+        - De-duplicates +/- entries
+        - Preserves unrelated content
+        """
+        existing_sections = {}
+        if os.path.exists(target_path):
+            try:
+                with open(target_path, 'r', encoding='utf-8') as f:
+                    current = None
+                    for raw_line in f.read().splitlines():
+                        line = raw_line.rstrip('\n')
+                        if not line.strip():
+                            if current is not None:
+                                existing_sections.setdefault(current, []).append("")
+                            continue
+                        if line.strip().startswith('[') and line.strip().endswith(']'):
+                            current = line.strip()
+                            existing_sections.setdefault(current, [])
+                        else:
+                            if current is None:
+                                continue
+                            existing_sections.setdefault(current, []).append(line.strip())
+            except Exception as e:
+                logger.warn(f"{not_found_warning}: {e}")
+                existing_sections = {}
+        
+        desired_sections = UnrealEngineManager._parse_ini_sections(desired_content)
+
+        for section, desired_lines in desired_sections.items():
+            existing_lines = existing_sections.get(section, [])
+            to_add_after_cleanup = []
+            for dline in desired_lines:
+                op, key = UnrealEngineManager._extract_ini_key(dline)
+                if op is None:
+                    new_existing = []
+                    for eline in existing_lines:
+                        eop, ekey = UnrealEngineManager._extract_ini_key(eline.strip())
+                        if ekey == key and eop is None:
+                            continue
+                        new_existing.append(eline)
+                    existing_lines = new_existing
+                    to_add_after_cleanup.append(dline)
+                else:
+                    existing_lines = [eline for eline in existing_lines if eline.strip() != dline]
+                    to_add_after_cleanup.append(dline)
+
+            seen = set()
+            unique_to_add = []
+            for line in to_add_after_cleanup:
+                if line not in seen:
+                    unique_to_add.append(line)
+                    seen.add(line)
+
+            # Avoid introducing a blank line before newly appended settings
+            while existing_lines and existing_lines[-1] == "":
+                existing_lines.pop()
+
+            existing_lines.extend(unique_to_add)
+            existing_sections[section] = existing_lines
+
+        section_order = list(existing_sections.keys())
+        for sec in desired_sections.keys():
+            if sec not in section_order:
+                section_order.append(sec)
+
+        with open(target_path, 'w', encoding='utf-8') as f:
+            first = True
+            for sec in section_order:
+                if not first:
+                    f.write("\n")
+                first = False
+                f.write(f"{sec}\n")
+                lines = existing_sections.get(sec, [])
+                # Trim leading/trailing blank lines within the section to avoid a blank right after header
+                start_idx = 0
+                end_idx = len(lines) - 1
+                while start_idx <= end_idx and lines[start_idx] == "":
+                    start_idx += 1
+                while end_idx >= start_idx and lines[end_idx] == "":
+                    end_idx -= 1
+                for i in range(start_idx, end_idx + 1):
+                    line = lines[i]
+                    if line == "":
+                        f.write("\n")
+                    else:
+                        f.write(f"{line}\n")
+
     def build_project_structure(self) -> bool:
         """
         Creates a new Unreal Engine project based on the TP_Blank template.
@@ -365,10 +488,8 @@ class UnrealEngineManager:
     @staticmethod
     def _update_game_ini(project_dir, plugin_name):
         """
-        Updates the DefaultGame.ini file in the project's Config directory with the required settings.
-
-        This function writes hardcoded settings to DefaultGame.ini. It replaces the <PluginName> placeholder
-        with the provided plugin_name.
+        Ensures required settings exist in DefaultGame.ini by overriding existing scalar keys
+        and de-duplicating array-style (+/-) entries within their sections.
 
         Args:
             project_dir (str): The path to your Unreal project directory.
@@ -381,7 +502,7 @@ class UnrealEngineManager:
         # Path to the DefaultGame.ini file
         default_game_ini_path = os.path.join(config_dir, config.get_config_file_name("default_game"))
 
-        # Hardcoded INI content with <PluginName> placeholder
+        # Desired settings content with <PluginName> placeholder
         ini_content = r'''
 [/Script/UnrealEd.ProjectPackagingSettings]
 bUseIoStore=False
@@ -401,14 +522,14 @@ bShouldAcquireMissingChunksOnLoad=False
 bShouldWarnAboutInvalidAssets=True
 MetaDataTagsForAssetRegistry=()
         '''
-        # Replace <PluginName> with the actual plugin name
         ini_content = ini_content.replace("<PluginName>", plugin_name)
 
-        # Write the content to DefaultGame.ini
-        with open(default_game_ini_path, "w", encoding="utf-8") as file:
-            file.write(ini_content.strip() + "\n")
-
-        logger.debug(f"Updated DefaultGame.ini with plugin: {plugin_name}")
+        UnrealEngineManager._merge_ini_file(
+            default_game_ini_path,
+            ini_content,
+            "Failed to read existing DefaultGame.ini, will recreate"
+        )
+        logger.debug(f"Merged DefaultGame.ini with plugin: {plugin_name}")
 
     @staticmethod
     def _update_engine_ini(project_dir, convai_api_key):
@@ -634,123 +755,11 @@ MinimumiOSVersion=IOS_16
 API_Key={convai_api_key}
 """
         
-        def parse_sections(raw: str):
-            sections = {}
-            current = None
-            for raw_line in raw.splitlines():
-                line = raw_line.strip()
-                if not line:
-                    continue
-                if line.startswith("[") and line.endswith("]"):
-                    current = line
-                    sections.setdefault(current, [])
-                else:
-                    if current is None:
-                        # Skip lines before any section header
-                        continue
-                    sections[current].append(line)
-            return sections
-
-        def extract_key(line: str):
-            # Handles lines like `Key=Value`, `+Key=Value`, `-Key=Value`
-            op = None
-            rest = line
-            if line and line[0] in ['+', '-']:
-                op = line[0]
-                rest = line[1:]
-            if '=' in rest:
-                key = rest.split('=', 1)[0].strip()
-            else:
-                key = rest.strip()
-            return op, key
-
-        # Load existing ini (if present) and parse into sections preserving unknown content
-        existing_sections = {}
-        if os.path.exists(default_engine_ini_path):
-            try:
-                with open(default_engine_ini_path, 'r', encoding='utf-8') as f:
-                    current = None
-                    for raw_line in f.read().splitlines():
-                        line = raw_line.rstrip('\n')
-                        if not line.strip():
-                            # Preserve blank lines inside a section to keep readability
-                            if current is not None:
-                                existing_sections.setdefault(current, []).append("")
-                            continue
-                        if line.strip().startswith('[') and line.strip().endswith(']'):
-                            current = line.strip()
-                            existing_sections.setdefault(current, [])
-                        else:
-                            if current is None:
-                                # Skip lines before first header
-                                continue
-                            existing_sections.setdefault(current, []).append(line.strip())
-            except Exception as e:
-                logger.warn(f"Failed to read existing DefaultEngine.ini, will recreate: {e}")
-                existing_sections = {}
-
-        desired_sections = parse_sections(lines_to_add)
-
-        # Merge desired into existing
-        for section, desired_lines in desired_sections.items():
-            existing_lines = existing_sections.get(section, [])
-
-            # Build maps for fast replacement of scalar keys
-            # For scalars (no +/-), we will remove any lines with the same key and then add ours once.
-            to_add_after_cleanup = []
-            for dline in desired_lines:
-                op, key = extract_key(dline)
-                if op is None:
-                    # Remove any existing lines that define the same scalar key (with or without +/- just in case)
-                    new_existing = []
-                    for eline in existing_lines:
-                        eop, ekey = extract_key(eline.strip())
-                        if ekey == key and eop is None:
-                            # Drop conflicting scalar definition
-                            continue
-                        new_existing.append(eline)
-                    existing_lines = new_existing
-                    to_add_after_cleanup.append(dline)
-                else:
-                    # Array-style entries: ensure our exact line exists once; de-duplicate identical lines.
-                    # Remove duplicate occurrences of the exact same line first
-                    existing_lines = [eline for eline in existing_lines if eline.strip() != dline]
-                    # Then append our desired entry
-                    to_add_after_cleanup.append(dline)
-
-            # After processing all desired lines, append them back preserving order
-            # Also remove accidental duplicates among to_add_after_cleanup while preserving order
-            seen = set()
-            unique_to_add = []
-            for line in to_add_after_cleanup:
-                if line not in seen:
-                    unique_to_add.append(line)
-                    seen.add(line)
-
-            # Rebuild section: keep other existing lines (including comments/blank) and append our desired ones at the end
-            existing_lines.extend(unique_to_add)
-            existing_sections[section] = existing_lines
-
-        # Write back the merged INI
-        # Keep section order: existing first, then any new desired sections not present
-        section_order = list(existing_sections.keys())
-        for sec in desired_sections.keys():
-            if sec not in section_order:
-                section_order.append(sec)
-
-        with open(default_engine_ini_path, 'w', encoding='utf-8') as f:
-            first = True
-            for sec in section_order:
-                if not first:
-                    f.write("\n")
-                first = False
-                f.write(f"{sec}\n")
-                for line in existing_sections.get(sec, []):
-                    if line == "":
-                        f.write("\n")
-                    else:
-                        f.write(f"{line}\n")
-
+        UnrealEngineManager._merge_ini_file(
+            default_engine_ini_path,
+            lines_to_add,
+            "Failed to read existing DefaultEngine.ini, will recreate"
+        )
         logger.debug("Merged DefaultEngine.ini with required settings and API key")
     
     @staticmethod
@@ -759,7 +768,7 @@ API_Key={convai_api_key}
         os.makedirs(config_dir, exist_ok=True)
         default_input_ini_path = os.path.join(config_dir, config.get_config_file_name("default_input"))
 
-        # Lines to append
+        # Desired settings content
         content_to_write = f"""
 [/Script/Engine.InputSettings]
 -AxisConfig=(AxisKeyName="Gamepad_LeftX",AxisProperties=(DeadZone=0.25,Exponent=1.f,Sensitivity=1.f))
@@ -860,6 +869,10 @@ DefaultTouchInterface=/Engine/MobileResources/HUD/DefaultVirtualJoysticks.Defaul
 +ConsoleKeys=Tilde
 +ConsoleKeys=Caret
 """
-        with open(default_input_ini_path, "w", encoding="utf-8") as file:
-            file.write(content_to_write.strip() + "\n")
-        logger.debug("Updated DefaultInput.ini")
+        
+        UnrealEngineManager._merge_ini_file(
+            default_input_ini_path,
+            content_to_write,
+            "Failed to read existing DefaultInput.ini, will recreate"
+        )
+        logger.debug("Merged DefaultInput.ini")
