@@ -10,7 +10,7 @@ from core.unreal_engine_manager import UnrealEngineManager
 from core.logger import logger, suppress_external_logging
 from core.version_manager import VersionManager
 
-TOOL_VERSION = "2.4.1"
+TOOL_VERSION = "2.5.0"
 
 def get_script_dir():
     if getattr(sys, 'frozen', False):
@@ -86,6 +86,8 @@ def UpdateModdingProject():
     asset_type = metadata.get("asset_type")
     is_metahuman = metadata.get("is_metahuman")
     project_name = metadata.get("project_name")
+    api_key = metadata.get("api_key")
+    plugin_name = metadata.get("plugin_name")
 
     ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)
     
@@ -101,6 +103,8 @@ def UpdateModdingProject():
     
     logger.step("Configuring project assets...")
     ue_manager.configure_assets_in_project(asset_type, is_metahuman)
+    
+    ue_manager.update_ini_files(plugin_name, api_key)
     
     logger.step("Building project...")
     ue_manager.run_unreal_build()

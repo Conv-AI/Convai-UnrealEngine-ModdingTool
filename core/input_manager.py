@@ -181,7 +181,7 @@ class InputManager:
             return self.asset_type, self.is_metahuman
         while True:
             print('Select the type of asset you want to create:')
-            print('1. Scene (Coming soon)')
+            print('1. Scene')
             print('2. Avatar')
             choice = input('Enter your choice (1 or 2): ').strip()
             if choice == '1':
