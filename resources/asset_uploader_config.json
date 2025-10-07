@@ -1,7 +1,7 @@
 {
     "unreal-engine": {
         "windows": {
-            "should-package": true,
+            "should-package": false,
             "configuration": "Shipping"
         },
         "linux": {
