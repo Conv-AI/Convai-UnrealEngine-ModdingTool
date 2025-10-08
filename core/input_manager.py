@@ -60,12 +60,15 @@ class InputManager:
             print('\nWhat do you want to do?')
             print('1. Create a new modding project')
             print('2. Update an existing modding project')
-            choice = input('Enter your choice (1 or 2): ').strip()
+            print('3. Migrate an existing modding project to new UE version')
+            choice = input('Enter your choice (1, 2, or 3): ').strip()
             if choice == '1':
                 return 'create'
             if choice == '2':
                 return 'update'
-            print('Invalid input. Please enter 1 or 2.')
+            if choice == '3':
+                return 'migrate'
+            print('Invalid input. Please enter 1, 2, or 3.')
 
     def choose_project_dir(self) -> str:
         if self._existing_projects is None:

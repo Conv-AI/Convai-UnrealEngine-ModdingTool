@@ -47,6 +47,30 @@ class FileUtilityManager:
             raise
 
     @staticmethod
+    def copy_directory(src: str, dst: str) -> bool:
+        """
+        Copies an entire directory tree to a new location.
+        
+        Args:
+            src (str): Source directory path
+            dst (str): Destination directory path
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if os.path.exists(dst):
+                logger.error(f"Destination directory already exists: {dst}")
+                return False
+            
+            shutil.copytree(src, dst)
+            logger.success(f"Successfully copied directory: {os.path.basename(src)} -> {os.path.basename(dst)}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to copy directory {src} to {dst}: {e}")
+            return False
+
+    @staticmethod
     def generate_unique_str() -> str:
         """
         Returns a short UUID-based string for naming collisions.
