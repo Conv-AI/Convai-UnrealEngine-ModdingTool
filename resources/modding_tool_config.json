@@ -1,8 +1,4 @@
 {
-    "unreal_engine": {
-        "current_version": "5.5",
-        "target_version": "5.5"
-    },
     "cross_compilation": {
         "toolchain_version": "v23_clang-18.1.0-rockylinux8",
         "environment_variable": "LINUX_MULTIARCH_ROOT"

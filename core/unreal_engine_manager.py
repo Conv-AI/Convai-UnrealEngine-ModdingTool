@@ -392,7 +392,7 @@ class UnrealEngineManager:
 
     @staticmethod
     def is_supported_engine_version(engine_version: str) -> bool:
-        return engine_version in config.get_supported_engine_versions()
+        return engine_version == config.get_unreal_engine_version()
 
     @staticmethod
     def is_valid_engine_path(path: Path) -> bool:

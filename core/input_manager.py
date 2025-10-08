@@ -9,9 +9,8 @@ from core.unreal_engine_manager import UnrealEngineManager
 
 class InputManager:
     """Handles all user input prompts across the Convai Modding Tool."""
-    def __init__(self, script_dir: str, default_engine_paths: list[str] = None):
+    def __init__(self, script_dir: str):
         self.script_dir = Path(script_dir)
-        self.default_engine_paths = default_engine_paths or []
         self._existing_projects = None
         self.project_name = None
         self.convai_api_key = None
