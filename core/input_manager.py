@@ -89,12 +89,13 @@ class InputManager:
                 pass
             print(f"❌ '{choice}' is not valid. Enter a number between 1 and {len(self._existing_projects)}.")
 
-    def get_unreal_engine_path(self, version_type: str = "current") -> str:
+    def get_unreal_engine_path(self, version_type: str = "current", require_user_confirmation: bool = False) -> str:
         """
         Get Unreal Engine path from user.
         
         Args:
             version_type: "current" for current UE version, "target" for target UE version
+            require_user_confirmation: Whether to ask for user confirmation when auto-detecting paths
         """
         # Don't cache if we're asking for different version types
         if version_type == "current" and self.unreal_engine_path:
@@ -102,45 +103,52 @@ class InputManager:
 
         # Get the appropriate version based on type
         if version_type == "target":
-            ue_version = config.get_target_unreal_engine_version()
-            validation_func = UnrealEngineManager.is_valid_target_engine_path
+            required_ue_version = config.get_target_unreal_engine_version()
+            path_validation_function = UnrealEngineManager.is_valid_target_engine_path
         else:
-            ue_version = config.get_current_unreal_engine_version()
-            validation_func = UnrealEngineManager.is_valid_current_engine_path
+            required_ue_version = config.get_current_unreal_engine_version()
+            path_validation_function = UnrealEngineManager.is_valid_current_engine_path
 
         # 1) Try the registry
-        for version, path_str in self._find_registry_engines():
-            path_obj = Path(path_str)
-            if validation_func(path_obj):
+        for registry_version, registry_path_str in self._find_registry_engines():
+            registry_path_obj = Path(registry_path_str)
+            if path_validation_function(registry_path_obj):
                 # Check if this registry version matches what we're looking for
-                if version == ue_version:
-                    resp = input(f"Found Unreal Engine {version} at:  {path_obj}\nUse this? [Y/N]: ").strip().lower()
-                    if resp in ("", "y", "yes"):
-                        if version_type == "current":
-                            self.unreal_engine_path = str(path_obj)
-                        return str(path_obj)
+                if registry_version == required_ue_version:
+                    if require_user_confirmation:
+                        user_response = input(f"Found Unreal Engine {registry_version} at:  {registry_path_obj}\nUse this? [Y/N]: ").strip().lower()
+                        if user_response not in ("", "y", "yes"):
+                            continue  # Skip this path and try next one
+                    
+                    if version_type == "current":
+                        self.unreal_engine_path = str(registry_path_obj)
+                    return str(registry_path_obj)
 
         # Show all available engines if exact match not found
-        print(f"\nLooking for Unreal Engine {ue_version}...")
-        for version, path_str in self._find_registry_engines():
-            path_obj = Path(path_str)
-            if validation_func(path_obj):
-                resp = input(f"Found Unreal Engine {version} at:  {path_obj}\nUse this? [Y/N]: ").strip().lower()
-                if resp in ("", "y", "yes"):
-                    if version_type == "current":
-                        self.unreal_engine_path = str(path_obj)
-                    return str(path_obj)
+        if require_user_confirmation:
+            print(f"\nLooking for Unreal Engine {required_ue_version}...")
+        for registry_version, registry_path_str in self._find_registry_engines():
+            registry_path_obj = Path(registry_path_str)
+            if path_validation_function(registry_path_obj):
+                if require_user_confirmation:
+                    user_response = input(f"Found Unreal Engine {registry_version} at:  {registry_path_obj}\nUse this? [Y/N]: ").strip().lower()
+                    if user_response not in ("", "y", "yes"):
+                        continue  # Skip this path and try next one
+                
+                if version_type == "current":
+                    self.unreal_engine_path = str(registry_path_obj)
+                return str(registry_path_obj)
 
         # 2) Last resort: ask the user
         while True:
-            user_input = input(f"Enter the Unreal Engine {ue_version} installation directory: ").strip()
-            engine_path = Path(user_input)
-            if validation_func(engine_path):
-                print(f"Using Unreal Engine path: {engine_path}")
+            user_input_path = input(f"Enter the Unreal Engine {required_ue_version} installation directory: ").strip()
+            user_provided_engine_path = Path(user_input_path)
+            if path_validation_function(user_provided_engine_path):
+                print(f"Using Unreal Engine path: {user_provided_engine_path}")
                 if version_type == "current":
-                    self.unreal_engine_path = str(engine_path)
-                return str(engine_path)
-            print(f"Invalid path. Please enter a valid Unreal Engine {ue_version} directory.")
+                    self.unreal_engine_path = str(user_provided_engine_path)
+                return str(user_provided_engine_path)
+            print(f"Invalid path. Please enter a valid Unreal Engine {required_ue_version} directory.")
     
     def get_project_name(self) -> str:
         if self.project_name:
