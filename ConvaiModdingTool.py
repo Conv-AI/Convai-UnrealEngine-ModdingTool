@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import sys
+import json
 
 from core.config_manager import config
 from core.download_utils import DownloadManager
@@ -19,7 +20,7 @@ def get_script_dir():
         return Path(__file__).resolve().parent.parent
 
 #Managers
-input_manager = InputManager(get_script_dir(), config.get_default_engine_paths())
+input_manager = InputManager(get_script_dir())
 
 def CreateModdingProject():
     """Main execution flow for setting up an Unreal Engine project."""  
@@ -111,6 +112,88 @@ def UpdateModdingProject():
     
     logger.success("Modding project updated successfully!")
 
+def MigrateModdingProject():
+    """Main execution flow for migrating an existing Unreal Engine modding project to a new UE version."""
+    logger.section("Migrate Existing Modding Project")
+    
+    FileUtilityManager.validate_ubt_configuration()
+    
+    # Step 1: Select project to migrate and update it
+    logger.step("Selecting project to migrate...")
+    original_project_dir = input_manager.choose_project_dir()
+    
+    logger.step("Updating selected project...")
+    ue_dir = input_manager.get_unreal_engine_path()
+    
+    # Load project metadata
+    metadata = FileUtilityManager.get_metadata(original_project_dir)        
+    asset_type = metadata.get("asset_type")
+    is_metahuman = metadata.get("is_metahuman")
+    original_project_name = metadata.get("project_name")
+    api_key = metadata.get("api_key")
+    plugin_name = metadata.get("plugin_name")
+    
+    if not original_project_name:
+        logger.error("Project name not found in metadata. This project may not have been created with the modding tool.")
+        return
+
+    # Update the original project
+    ue_manager = UnrealEngineManager(ue_dir, original_project_name, original_project_dir)
+    
+    if not ue_manager.can_create_modding_project():
+        return
+    
+    logger.step("Checking project engine version...")
+    if not ue_manager.update_project_engine_version():
+        logger.warning("Failed to update project engine version, but continuing...")
+    
+    logger.step("Updating Convai dependencies...")
+    ue_manager.update_modding_dependencies()
+    
+    logger.step("Configuring project assets...")
+    ue_manager.configure_assets_in_project(asset_type, is_metahuman)
+    
+    ue_manager.update_ini_files(plugin_name, api_key)
+    
+    # Step 2: Get target UE version from Version.json
+    logger.step("Getting target Unreal Engine version...")
+    target_ue_version = config.get_target_unreal_engine_version()
+    
+    # Step 3: Create the copied directory with naming format OriginalProjectName_TargetUEVersion
+    migrated_directory_name = f"{original_project_name}_{target_ue_version}"
+    migrated_project_dir = os.path.join(input_manager.get_script_dir(), migrated_directory_name)
+    
+    logger.step(f"Creating copy of project for migration: {migrated_directory_name}")
+    if not FileUtilityManager.copy_directory(original_project_dir, migrated_project_dir):
+        logger.error("Failed to create project copy for migration")
+        return
+    
+    # Step 4: Update the copied project's engine version to target UE version
+    logger.step(f"Updating engine version to {target_ue_version}...")
+    
+    # Find the .uproject file in the copied directory (it keeps the original name)
+    uproject_file = os.path.join(migrated_project_dir, f"{original_project_name}.uproject")
+    
+    # Update the engine version in the .uproject file
+    try:
+        if not os.path.exists(uproject_file):
+            logger.error(f"Project file not found: {uproject_file}")
+            return
+            
+        with open(uproject_file, 'r', encoding='utf-8') as f:
+            project_data = json.load(f)
+        project_data['EngineAssociation'] = target_ue_version
+        with open(uproject_file, 'w', encoding='utf-8') as f:
+            json.dump(project_data, f, indent=4)
+        logger.success(f"Updated project to Unreal Engine {target_ue_version}")
+        
+    except Exception as e:
+        logger.error(f"Failed to update project engine version: {e}")
+        return
+    
+    logger.success(f"Successfully migrated project to {migrated_directory_name} with Unreal Engine {target_ue_version}!")
+    logger.info(f"Migrated project location: {migrated_project_dir}")
+    
 def main():
     
     if not VersionManager.check_version(TOOL_VERSION):
@@ -127,6 +210,8 @@ def main():
         CreateModdingProject()
     elif user_choice == "update":
         UpdateModdingProject()
+    elif user_choice == "migrate":
+        MigrateModdingProject()
 
 if __name__ == "__main__":
     main()

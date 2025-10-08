@@ -104,6 +104,13 @@ class ConfigManager:
         logger.warning(f"version data is not valid returning 5.5 as ue version")
         return '5.5'
     
+    def get_target_unreal_engine_version(self) -> str:
+        """Get target Unreal Engine version from cached version data."""
+        if self._version_data:
+            return self._version_data.get('target-ue-version', '5.6')
+        logger.warning(f"version data is not valid returning 5.6 as target ue version")
+        return '5.6'
+    
     def get_cross_compilation_toolchain(self) -> str:
         """Get cross-compilation toolchain version."""
         return self.get('cross_compilation.toolchain_version', 'v23_clang-18.1.0-rockylinux8')
