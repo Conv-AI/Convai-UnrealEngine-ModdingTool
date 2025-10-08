@@ -312,15 +312,15 @@ class UnrealEngineManager:
             DownloadManager.download_convai_realusion_content(self.project_dir)
             self.remove_metahuman_folder()
     
-    def can_create_modding_project(self) -> None:
+    def can_create_modding_project(self) -> bool:
         """
         Verifies that all prerequisites for creating a modding project are met.
         Checks Unreal Engine version and cross-compilation toolchain.
         Exits the process with an error message if any check fails.
         """
         # Engine version check
-        if not self.engine_version or not UnrealEngineManager.is_supported_engine_version(self.engine_version):
-            supported_versions = ', '.join(config.get_supported_engine_versions())
+        if not self.engine_version or not UnrealEngineManager.is_current_engine_version(self.engine_version):
+            supported_versions = config.get_current_unreal_engine_version()
             logger.error(f"Unreal Engine version {self.engine_version} is not supported. Supported versions: {supported_versions}")
             return False
 
@@ -342,6 +342,38 @@ class UnrealEngineManager:
             logger.error(f"Toolchain path does not exist: {toolchain_root}")
             return False
         
+        return True
+    
+    def can_create_migrated_project(self) -> bool:
+        """
+        Verifies that all prerequisites for creating/building a migrated project are met.
+        Checks target Unreal Engine version and cross-compilation toolchain for target version.
+        """
+        # Engine version check for target version
+        if not self.engine_version or not UnrealEngineManager.is_target_engine_version(self.engine_version):
+            target_version = config.get_target_unreal_engine_version()
+            logger.error(f"Unreal Engine version {self.engine_version} is not the target version. Expected target version: {target_version}")
+            return False
+
+        # Cross-compilation toolchain check (may be different for target version)
+        env_var = config.get_cross_compilation_env_var()
+        toolchain_root = os.environ.get(env_var)          
+        required_version = config.get_cross_compilation_toolchain()
+        
+        if not toolchain_root:
+            logger.error(f"{env_var} environment variable is not set for target UE version")
+            return False
+        
+        basename = os.path.basename(toolchain_root.strip("\\/"))        
+        if basename != required_version:
+            logger.error(f"Cross-compilation toolchain version mismatch for target UE. Found '{basename}', expected '{required_version}'")
+            return False
+        
+        if not os.path.exists(toolchain_root):
+            logger.error(f"Toolchain path does not exist for target UE: {toolchain_root}")
+            return False
+        
+        logger.info(f"Target UE version {self.engine_version} validation passed")
         return True
     
     def remove_metahuman_folder(self) -> None:
@@ -389,17 +421,40 @@ class UnrealEngineManager:
         except Exception as e:
             logger.error(f"Error reading engine version: {e}")
         return None
-
+    
     @staticmethod
-    def is_supported_engine_version(engine_version: str) -> bool:
-        return engine_version == config.get_unreal_engine_version()
+    def is_current_engine_version(engine_version: str) -> bool:
+        """Check if the given engine version matches the current UE version."""
+        return engine_version == config.get_current_unreal_engine_version()
+    
+    @staticmethod
+    def is_target_engine_version(engine_version: str) -> bool:
+        """Check if the given engine version matches the target UE version."""
+        return engine_version == config.get_target_unreal_engine_version()
 
     @staticmethod
     def is_valid_engine_path(path: Path) -> bool:
+        """Check if the given path is a valid Unreal Engine installation (any version)."""
         if not path.exists():
             return False
         ver = UnrealEngineManager._extract_engine_version(str(path))
-        return bool(ver and UnrealEngineManager.is_supported_engine_version(ver))
+        return bool(ver)
+    
+    @staticmethod
+    def is_valid_current_engine_path(path: Path) -> bool:
+        """Check if the given path is a valid current UE version installation."""
+        if not path.exists():
+            return False
+        ver = UnrealEngineManager._extract_engine_version(str(path))
+        return bool(ver and UnrealEngineManager.is_current_engine_version(ver))
+    
+    @staticmethod
+    def is_valid_target_engine_path(path: Path) -> bool:
+        """Check if the given path is a valid target UE version installation."""
+        if not path.exists():
+            return False
+        ver = UnrealEngineManager._extract_engine_version(str(path))
+        return bool(ver and UnrealEngineManager.is_target_engine_version(ver))
 
     @staticmethod
     def _set_engine_version(uproject_file: str, engine_version: str) -> None:

@@ -97,7 +97,7 @@ class ConfigManager:
         
         return value
     
-    def get_unreal_engine_version(self) -> str:
+    def get_current_unreal_engine_version(self) -> str:
         """Get current Unreal Engine version from cached version data."""
         if self._version_data:
             return self._version_data.get('current-ue-version', '5.5')
