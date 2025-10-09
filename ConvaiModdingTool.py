@@ -32,12 +32,12 @@ def CreateModdingProject():
     project_name = input_manager.get_project_name()
     project_dir = os.path.join(input_manager.get_script_dir(), project_name)
     
-    ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)    
-    if not ue_manager.can_create_modding_project():
-        return
-    
     convai_api_key = input_manager.get_api_key()
     asset_type, is_metahuman = input_manager.get_asset_type()
+    
+    ue_manager = UnrealEngineManager(ue_dir, project_name, project_dir)    
+    if not ue_manager.can_create_modding_project():
+        return  
     
     logger.step("Setting up project structure...")
     if not ue_manager.build_project_structure():
@@ -139,10 +139,7 @@ def MigrateModdingProject():
 
     # Update the original project with current UE version
     ue_manager = UnrealEngineManager(current_ue_dir, original_project_name, original_project_dir)
-    
-    if not ue_manager.can_create_modding_project():
-        return
-    
+        
     logger.step("Checking project engine version...")
     if not ue_manager.update_project_engine_version():
         logger.warning("Failed to update project engine version, but continuing...")
@@ -155,9 +152,18 @@ def MigrateModdingProject():
     
     ue_manager.update_ini_files(plugin_name, api_key)
     
-    # Step 2: Get target UE version and path
+    # Step 2: Get target UE version and check if migration is needed
     logger.step("Getting target Unreal Engine version...")
     target_ue_version = config.get_target_unreal_engine_version()
+    current_ue_version = config.get_current_unreal_engine_version()
+    
+    logger.info(f"Current UE version: {current_ue_version}")
+    logger.info(f"Target UE version: {target_ue_version}")
+    
+    if current_ue_version == target_ue_version:
+        logger.info(f"Current and target UE versions are the same ({current_ue_version})")
+        logger.success("No migration needed! Project is already using the target UE version.")
+        return
     
     logger.step(f"Please select the target Unreal Engine {target_ue_version} installation path...")
     target_ue_dir = input_manager.get_unreal_engine_path("target")
@@ -201,7 +207,13 @@ def MigrateModdingProject():
         logger.error(f"Failed to update project engine version: {e}")
         return
     
-    # Step 5: Build the migrated project with target UE version
+    # Step 5: Ensure target toolchain is installed and build the migrated project
+    logger.step(f"Ensuring toolchain for target UE {target_ue_version}...")
+    if not DownloadManager.ensure_toolchain_for_version(target_ue_version):
+        logger.error(f"Failed to ensure toolchain for UE {target_ue_version}")
+        logger.warning("Project migration completed but build may fail due to missing toolchain")
+        return
+    
     logger.step(f"Building migrated project with Unreal Engine {target_ue_version}...")
     migrated_ue_manager = UnrealEngineManager(target_ue_dir, original_project_name, migrated_project_dir)
     

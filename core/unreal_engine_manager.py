@@ -316,7 +316,7 @@ class UnrealEngineManager:
         """
         Verifies that all prerequisites for creating a modding project are met.
         Checks Unreal Engine version and cross-compilation toolchain.
-        Exits the process with an error message if any check fails.
+        Downloads and installs toolchain if missing.
         """
         # Engine version check
         if not self.engine_version or not UnrealEngineManager.is_current_engine_version(self.engine_version):
@@ -324,24 +324,18 @@ class UnrealEngineManager:
             logger.error(f"Unreal Engine version {self.engine_version} is not supported. Supported versions: {supported_versions}")
             return False
 
-        # Cross-compilation toolchain check
-        env_var = config.get_cross_compilation_env_var()
-        toolchain_root = os.environ.get(env_var)          
-        required_version = config.get_cross_compilation_toolchain()
+        # Cross-compilation toolchain check with auto-download
+        from core.download_utils import DownloadManager
         
-        if not toolchain_root:
-            logger.error(f"{env_var} environment variable is not set")
+        current_ue_version = config.get_current_unreal_engine_version()
+        logger.step(f"Ensuring toolchain for UE {current_ue_version}...")
+        
+        if not DownloadManager.ensure_toolchain_for_version(current_ue_version):
+            logger.error(f"Failed to ensure toolchain for UE {current_ue_version}")
+            logger.error("Cannot create modding project without cross-compilation toolchain")
             return False
         
-        basename = os.path.basename(toolchain_root.strip("\\/"))        
-        if basename != required_version:
-            logger.error(f"Cross-compilation toolchain version mismatch. Found '{basename}', expected '{required_version}'")
-            return False
-        
-        if not os.path.exists(toolchain_root):
-            logger.error(f"Toolchain path does not exist: {toolchain_root}")
-            return False
-        
+        logger.success(f"All prerequisites met for UE {current_ue_version} modding project")
         return True
     
     def can_create_migrated_project(self) -> bool:
@@ -358,7 +352,8 @@ class UnrealEngineManager:
         # Cross-compilation toolchain check (may be different for target version)
         env_var = config.get_cross_compilation_env_var()
         toolchain_root = os.environ.get(env_var)          
-        required_version = config.get_cross_compilation_toolchain()
+        target_ue_version = config.get_target_unreal_engine_version()
+        required_version = config.get_cross_compilation_toolchain(target_ue_version)  # Uses target UE version
         
         if not toolchain_root:
             logger.error(f"{env_var} environment variable is not set for target UE version")
@@ -366,7 +361,7 @@ class UnrealEngineManager:
         
         basename = os.path.basename(toolchain_root.strip("\\/"))        
         if basename != required_version:
-            logger.error(f"Cross-compilation toolchain version mismatch for target UE. Found '{basename}', expected '{required_version}'")
+            logger.error(f"Cross-compilation toolchain version mismatch for target UE {target_ue_version}. Found '{basename}', expected '{required_version}'")
             return False
         
         if not os.path.exists(toolchain_root):
