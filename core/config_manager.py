@@ -1,114 +1,86 @@
-from typing import Dict, List, Any
+import json
+import requests
+from typing import Dict, List, Any, Optional
+
+from core.logger import logger
 
 class ConfigManager:
     """Manages configuration settings for the Convai Modding Tool."""
     
-    # Configuration data stored directly in Python
-    _config = {
-        "unreal_engine": {
-            "current_version": "5.5",
-            "target_version": "5.5",
-            "supported_versions": ["5.5"],
-            "default_paths": [
-                "E:/Software/UE_5.5",
-                "C:/Program Files/Epic Games/UE_5.5",
-            ]
-        },
-        "cross_compilation": {
-            "toolchain_version": "v23_clang-18.1.0-rockylinux8",
-            "environment_variable": "LINUX_MULTIARCH_ROOT"
-        },
-        "github": {
-            "convai_plugin": {
-                "repo": "Conv-AI/Convai-UnrealEngine-SDK",
-                "asset_patterns": [".zip", "plugin", "unreal", "ue"],
-                "post_process": True
-            },
-            "convai_http_plugin": {
-                "repo": "Conv-AI/Convai-UnrealEngine-HTTP",
-                "asset_patterns": [".zip", "plugin", "unreal", "ue"],
-                "post_process": False
-            },
-            "convai_convenience_pack": {
-                "repo": "Conv-AI/Convai-UnrealEngine-CCPack",
-                "asset_patterns": [".zip", "pack", "convai", "convenience"],
-                "post_process": False
-            },
-            "convai_pak_manager": {
-                "repo": "Conv-AI/Convai-UnrealEngine-PakManager",
-                "asset_patterns": [".zip", "plugin", "pak", "manager"],
-                "post_process": False
-            }
-        },
-        "google_drive": {
-            "convai_reallusion_content": "1bAatTW4vYycDbGLeO1pGILc3OVOOR3je"
-        },
-        "project_settings": {
-            "max_project_name_length": 20,
-            "required_plugins": [
-                "ConvAI",
-                "ConvaiHTTP", 
-                "ConvaiPakManager",
-                "JsonBlueprintUtilities"
-            ],
-            "metahuman_plugins": [
-                "LiveLinkControlRig",
-                "AppleARKitFaceSupport",
-            ]
-        },
-        "directory_names": {
-            "plugins": "Plugins",
-            "content": "Content", 
-            "config": "Config",
-            "essentials": "ConvaiEssentials",
-            "editor": "Editor",
-            "source": "Source",
-            "templates": "Templates"
-        },
-        "file_names": {
-            "config_files": {
-                "default_game": "DefaultGame.ini",
-                "default_engine": "DefaultEngine.ini", 
-                "default_input": "DefaultInput.ini"
-            },
-            "metadata_file": "ModdingMetaData.txt",
-            "plugin_files": {
-                "convai": "ConvAI.uplugin",
-                "convai_http": "ConvaiHTTP.uplugin",
-                "convai_pak_manager": "ConvaiPakManager.uplugin"
-            },
-            "build_file": "Convai.Build.cs"
-        },
-        "asset_names": {
-            "uploader_asset": "AssetUploader.uasset",
-            "metahumans_folder": "MetaHumans",
-            "convenience_pack": "ConvaiConveniencePack",
-            "template_name": "TP_Blank"
-        },
-        "unreal_paths": {
-            "engine_binary": "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe",
-            "version_file": "Engine/Source/Runtime/Launch/Resources/Version.h"
-        },
-        "ubt_configuration": {
-            "appdata_path": "Unreal Engine/UnrealBuildTool/BuildConfiguration.xml",
-            "xml_namespace": "https://www.unrealengine.com/BuildConfiguration",
-            "required_settings": {
-                "bAllowUBALocalExecutor": "false"
-            },
-            "xml_template": {
-                "root_element": "Configuration",
-                "config_element": "BuildConfiguration"
-            }
-        }
-    }
-    
     _instance = None
+    
+    # GitHub configuration for fetching config
+    GITHUB_REPO = "Conv-AI/Convai-UnrealEngine-ModdingTool"
+    GITHUB_BRANCH = "main"
+    CONFIG_FILE_PATH = "resources/modding_tool_config.json"
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ConfigManager, cls).__new__(cls)
+            cls._instance._initialize_config()
         return cls._instance
     
+    def _initialize_config(self, max_attempts: int = 5):
+        """Initialize configuration with retry logic."""
+        self._config = None
+        self._version_data = None
+        
+        # First, load config with max attempts
+        for attempt in range(max_attempts):
+            try:
+                self._config = self._load_config_from_github()
+                if self._config:
+                    break
+                
+            except Exception as e:
+                if attempt == max_attempts - 1:
+                    logger.error(f"Configuration load failed after {max_attempts} attempts: {e}")
+        
+        # If config loading failed completely, raise error
+        if not self._config:
+            raise RuntimeError(f"Could not load configuration after {max_attempts} attempts. Please ensure GitHub is accessible.")
+        
+        # Then, load version data with max attempts
+        for attempt in range(max_attempts):
+            try:
+                self._version_data = self._load_version_from_github()
+                if self._version_data:
+                    break
+                
+            except Exception as e:
+                if attempt == max_attempts - 1:
+                    logger.error(f"Version data load failed after {max_attempts} attempts: {e}")
+    
+    def _load_config_from_github(self) -> Optional[Dict]:
+        """Load configuration from GitHub repository using raw URL."""
+        try:            
+            raw_url = f"https://raw.githubusercontent.com/{self.GITHUB_REPO}/{self.GITHUB_BRANCH}/{self.CONFIG_FILE_PATH}"
+            
+            response = requests.get(raw_url, timeout=30)
+            response.raise_for_status()
+            
+            return json.loads(response.text)
+                
+        except Exception as e:
+            logger.debug(f"Failed to load config from GitHub: {e}")
+        
+        return None
+    
+    def _load_version_from_github(self) -> Optional[Dict]:
+        """Load version data from Version.json on GitHub using raw URL."""
+        try:            
+            raw_url = f"https://raw.githubusercontent.com/{self.GITHUB_REPO}/{self.GITHUB_BRANCH}/Version.json"
+            
+            response = requests.get(raw_url, timeout=30)
+            response.raise_for_status()
+            
+            return json.loads(response.text)
+                
+        except Exception as e:
+            logger.debug(f"Failed to load version data from GitHub: {e}")
+        
+        return None
+        
     def get(self, key_path: str, default=None) -> Any:
         """
         Get configuration value using dot notation.
@@ -125,17 +97,19 @@ class ConfigManager:
         
         return value
     
-    def get_unreal_engine_version(self) -> str:
-        """Get current Unreal Engine version."""
-        return self.get('unreal_engine.current_version', '5.5')
+    def get_current_unreal_engine_version(self) -> str:
+        """Get current Unreal Engine version from cached version data."""
+        if self._version_data:
+            return self._version_data.get('current-ue-version', '5.5')
+        logger.warning(f"version data is not valid returning 5.5 as ue version")
+        return '5.5'
     
-    def get_supported_engine_versions(self) -> List[str]:
-        """Get list of supported Unreal Engine versions."""
-        return self.get('unreal_engine.supported_versions', ['5.5'])
-    
-    def get_default_engine_paths(self) -> List[str]:
-        """Get list of default Unreal Engine installation paths."""
-        return self.get('unreal_engine.default_paths', [])
+    def get_target_unreal_engine_version(self) -> str:
+        """Get target Unreal Engine version from cached version data."""
+        if self._version_data:
+            return self._version_data.get('target-ue-version', '5.6')
+        logger.warning(f"version data is not valid returning 5.6 as target ue version")
+        return '5.6'
     
     def get_cross_compilation_toolchain(self) -> str:
         """Get cross-compilation toolchain version."""
