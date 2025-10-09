@@ -1,6 +1,14 @@
 {
     "cross_compilation": {
-        "toolchain_version": "v23_clang-18.1.0-rockylinux8",
+        "toolchain_versions": {
+            "5.5": "v23_clang-18.1.0-rockylinux8",
+            "5.6": "v25_clang-18.1.0-rockylinux8"
+        },
+        "toolchain_download_urls": {
+            "v23_clang-18.1.0-rockylinux8": "https://cdn.unrealengine.com/CrossToolchain_Linux/v23_clang-18.1.0-rockylinux8.exe",
+            "v25_clang-18.1.0-rockylinux8": "https://cdn.unrealengine.com/CrossToolchain_Linux/v25_clang-18.1.0-rockylinux8.exe"
+        },
+        "toolchain_install_directory": "C:\\UnrealToolchains",
         "environment_variable": "LINUX_MULTIARCH_ROOT"
     },
     "github": {
