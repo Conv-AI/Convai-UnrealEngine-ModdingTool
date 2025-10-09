@@ -1,6 +1,7 @@
 import os
 import zipfile
 import shutil
+import subprocess
 import requests
 import time
 import gdown
@@ -355,3 +356,392 @@ class DownloadManager:
         except Exception as e:
             logger.error(f"Error extracting content pack: {e}")
             return None
+    
+    @staticmethod
+    def is_toolchain_downloaded(ue_version: str) -> tuple[bool, str]:
+        """
+        Check if the toolchain installer is already downloaded.
+        
+        Args:
+            ue_version: The UE version to check toolchain for
+            
+        Returns:
+            Tuple of (is_downloaded, installer_path)
+        """
+        from core.config_manager import config
+        
+        toolchain_version = config.get_cross_compilation_toolchain(ue_version)
+        download_directory = config.get_cross_compilation_download_directory()
+        
+        # Check for downloaded installer in the download directory
+        exe_filename = f"{toolchain_version}.exe"
+        exe_path = os.path.join(download_directory, exe_filename)
+        
+        if os.path.exists(exe_path):
+            logger.info(f"✅ Found downloaded installer: {exe_path}")
+            return True, exe_path
+        
+        logger.info(f"❌ Installer not found: {exe_path}")
+        return False, exe_path
+    
+    @staticmethod
+    def is_toolchain_installed(ue_version: str) -> bool:
+        """
+        Check if the cross-compilation toolchain for a specific UE version is installed.
+        Checks multiple common locations including AppData and system directories.
+        
+        Args:
+            ue_version: The UE version to check toolchain for (e.g., "5.5", "5.6")
+            
+        Returns:
+            True if toolchain is installed, False otherwise
+        """
+        from core.config_manager import config
+        
+        toolchain_version = config.get_cross_compilation_toolchain(ue_version)
+        
+        # Check multiple possible locations
+        possible_locations = [
+            # 1. Configured system install directory
+            config.get_cross_compilation_install_directory(),
+            # 2. User directory (fallback installation location)
+            config.get_cross_compilation_download_directory().replace("Downloads", "Toolchains"),
+            # 3. Legacy C:\UnrealToolchains location
+            f"C:\\UnrealToolchains",
+            # 4. Unreal Engine's default toolchain location
+            f"C:\\UnrealEngine\\Toolchains"
+        ]
+        
+        for base_dir in possible_locations:
+            toolchain_path = os.path.join(base_dir, toolchain_version)
+            
+            if not os.path.exists(toolchain_path):
+                logger.info(f"🔍 Toolchain not found at: {toolchain_path}")
+                continue
+                
+            # Check if toolchain directory has expected structure (contains build directory)
+            build_path = os.path.join(toolchain_path, "build")
+            if not os.path.exists(build_path):
+                logger.info(f"🔍 Toolchain build directory not found at: {build_path}")
+                continue
+                
+            logger.info(f"✅ Found toolchain {toolchain_version} at: {toolchain_path}")
+            
+            # Update environment variable to point to found toolchain
+            env_var = config.get_cross_compilation_env_var()
+            
+            # Always ensure the environment variable points to the correct toolchain for this UE version
+            # (The toolchain installer might have set it to a different version)
+            expected_toolchain_path = os.path.join(
+                config.get_cross_compilation_install_directory(), 
+                toolchain_version
+            )
+            
+            DownloadManager._set_environment_variable_permanently(env_var, expected_toolchain_path)
+            logger.info(f"🔧 Set {env_var}={expected_toolchain_path}")
+            
+            return True
+            
+        logger.info(f"❌ Toolchain {toolchain_version} not found in any location")
+        return False
+    
+    @staticmethod
+    def install_toolchain_from_installer(ue_version: str, installer_path: str) -> bool:
+        """
+        Install toolchain from a downloaded installer executable.
+        
+        Args:
+            ue_version: The UE version to install toolchain for
+            installer_path: Path to the downloaded .exe installer
+            
+        Returns:
+            True if installation successful, False otherwise
+        """
+        from core.config_manager import config
+        import ctypes
+        import sys
+        import subprocess
+        import os
+        
+        try:
+            toolchain_version = config.get_cross_compilation_toolchain(ue_version)
+            install_directory = config.get_cross_compilation_install_directory()
+            toolchain_path = os.path.join(install_directory, toolchain_version)
+            
+            logger.info(f"🔧 Installing toolchain from: {installer_path}")
+            logger.info(f"🔧 Installing to: {toolchain_path}")
+            
+            # Check if we have admin privileges
+            def is_admin():
+                try:
+                    return ctypes.windll.shell32.IsUserAnAdmin()
+                except:
+                    return False
+            
+            if not is_admin():
+                logger.warning("⚠️  Admin privileges required for system-wide installation")
+                logger.info("🔄 Launching installer - please complete the installation and then press Enter...")
+                
+                # Use the simplest approach: just launch the exe like double-clicking it
+                try:
+                    # Launch installer like double-clicking in Windows Explorer
+                    logger.info("🎯 Launching installer GUI...")
+                    os.startfile(installer_path)
+                    
+                    # Wait for user to complete installation
+                    logger.info("⏸️  Waiting for installation to complete...")
+                    print("\n📋 Please complete the installer and press Enter when finished...", end="", flush=True)
+                    
+                    # Use sys.stdin.readline() as alternative to input()
+                    import sys
+                    sys.stdin.flush()
+                    user_input = sys.stdin.readline()
+                    
+                    logger.info("🔍 Checking installation results...")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to launch installer: {e}")
+                    # Fallback: Try with subprocess.Popen (fire and forget)
+                    try:
+                        logger.info("🔄 Trying alternative launch method...")
+                        subprocess.Popen([installer_path], shell=True)
+                        logger.info("⏸️  Waiting for installation to complete...")
+                        print("\n📋 Please complete the installer and press Enter when finished...", end="", flush=True)
+                        
+                        # Use sys.stdin.readline() as alternative to input()
+                        import sys
+                        sys.stdin.flush()
+                        user_input = sys.stdin.readline()
+                        
+                        logger.info("🔍 Checking installation results...")
+                    except Exception as e2:
+                        logger.error(f"All launch methods failed: {e2}")
+                        return False
+            else:
+                # We have admin privileges, install normally
+                install_command = [installer_path, "/S", f"/D={toolchain_path}"]
+                result = subprocess.run(install_command, check=True, capture_output=True, text=True)
+                logger.info(f"🔧 Installer completed successfully")
+            
+            # Verify installation by checking if toolchain directory exists and has build folder
+            if os.path.exists(toolchain_path) and os.path.exists(os.path.join(toolchain_path, "build")):
+                logger.success(f"Successfully installed toolchain {toolchain_version} for UE {ue_version}")
+                
+                # Set environment variable to the actual installation path
+                env_var = config.get_cross_compilation_env_var()
+                
+                # Always set to the specific toolchain path for this UE version
+                # (The installer might have set it to a generic or different path)
+                DownloadManager._set_environment_variable_permanently(env_var, toolchain_path)
+                logger.info(f"🔧 Set {env_var}={toolchain_path}")
+                
+                # Keep the installer for future use (caching)
+                logger.info(f"💾 Keeping installer cached at: {installer_path}")
+                
+                return True
+            else:
+                logger.error(f"Toolchain installation verification failed - directory or build folder not found")
+                return False
+                
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Installation failed: {e}")
+            if hasattr(e, 'stderr') and e.stderr:
+                logger.error(f"Installer stderr: {e.stderr}")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to install toolchain: {e}")
+            return False
+    
+    @staticmethod
+    def download_and_install_toolchain(ue_version: str) -> bool:
+        """
+        Download and install the cross-compilation toolchain for a specific UE version.
+        Uses a 3-step process: Check installed -> Check downloaded -> Download & Install
+        
+        Args:
+            ue_version: The UE version to install toolchain for (e.g., "5.5", "5.6")
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        from core.config_manager import config
+        
+        try:
+            toolchain_version = config.get_cross_compilation_toolchain(ue_version)
+            
+            # Step 1: Check if already installed anywhere
+            if DownloadManager.is_toolchain_installed(ue_version):
+                logger.info(f"✅ Toolchain {toolchain_version} is already installed and configured")
+                return True
+            
+            # Step 2: Check if installer is already downloaded
+            is_downloaded, installer_path = DownloadManager.is_toolchain_downloaded(ue_version)
+            
+            if is_downloaded:
+                logger.info(f"📦 Found downloaded installer, proceeding with installation...")
+                return DownloadManager.install_toolchain_from_installer(ue_version, installer_path)
+            
+            # Step 3: Download the installer
+            download_url = config.get_cross_compilation_toolchain_url(toolchain_version)
+            
+            if not download_url:
+                logger.error(f"No download URL configured for toolchain {toolchain_version}")
+                return False
+            
+            # Use download directory for the installer
+            download_directory = config.get_cross_compilation_download_directory()
+            
+            # Create download directory if it doesn't exist
+            os.makedirs(download_directory, exist_ok=True)
+            
+            logger.info(f"📥 Downloading toolchain {toolchain_version} for UE {ue_version}...")
+            
+            # Download the toolchain executable file
+            exe_filename = f"{toolchain_version}.exe"
+            exe_path = os.path.join(download_directory, exe_filename)
+            
+            response = requests.get(download_url, stream=True)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+            
+            with open(exe_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        if total_size > 0:
+                            progress = (downloaded_size / total_size) * 100
+                            print(f"\rDownloading: {progress:.1f}%", end='', flush=True)
+            
+            print()  # New line after progress
+            logger.success(f"Downloaded {exe_filename}")
+            
+            # Step 4: Install from the downloaded installer
+            return DownloadManager.install_toolchain_from_installer(ue_version, exe_path)
+                
+        except Exception as e:
+            logger.error(f"Failed to download/install toolchain: {e}")
+            return False
+    
+    @staticmethod
+    def ensure_toolchain_for_version(ue_version: str) -> bool:
+        """
+        Ensure the correct toolchain is installed for a specific UE version.
+        First checks existing installations, then downloads and installs if not present.
+        
+        Args:
+            ue_version: The UE version to ensure toolchain for (e.g., "5.5", "5.6")
+            
+        Returns:
+            True if toolchain is available, False otherwise
+        """
+        from core.config_manager import config
+        import os
+        
+        toolchain_version = config.get_cross_compilation_toolchain(ue_version)
+        logger.info(f"🔍 Ensuring toolchain {toolchain_version} for UE {ue_version}")
+        
+        if DownloadManager.is_toolchain_installed(ue_version):
+            logger.success(f"Toolchain for UE {ue_version} is ready!")
+            return True
+        
+        logger.info(f"📦 Toolchain for UE {ue_version} not found, downloading and installing...")
+        return DownloadManager.download_and_install_toolchain(ue_version)
+    
+    @staticmethod
+    def _set_environment_variable_permanently(var_name: str, var_value: str) -> bool:
+        """
+        Set environment variable permanently in Windows system registry.
+        
+        Args:
+            var_name: Name of the environment variable
+            var_value: Value to set
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import winreg
+            import ctypes
+            
+            # Check if we have admin privileges
+            def is_admin():
+                try:
+                    return ctypes.windll.shell32.IsUserAnAdmin()
+                except:
+                    return False
+            
+            if is_admin():
+                # Set as system environment variable (requires admin)
+                try:
+                    key = winreg.OpenKey(
+                        winreg.HKEY_LOCAL_MACHINE,
+                        "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+                        0,
+                        winreg.KEY_SET_VALUE
+                    )
+                    
+                    winreg.SetValueEx(key, var_name, 0, winreg.REG_EXPAND_SZ, var_value)
+                    winreg.CloseKey(key)
+                    logger.info(f"✅ Set {var_name} as system environment variable")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to set system environment variable: {e}")
+                    return False
+            else:
+                # No admin privileges - try to elevate and set system variable
+                logger.info(f"🔐 Admin privileges required to set system environment variable")
+                logger.info(f"🔄 Attempting to set {var_name} with elevation...")
+                
+                try:
+                    # Use a simpler PowerShell command with proper escaping
+                    import subprocess
+                    
+                    # Build the command as a list to avoid escaping issues
+                    ps_command = [
+                        "powershell", "-Command",
+                        f"Start-Process powershell -ArgumentList '-Command \"Set-ItemProperty -Path ''HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'' -Name ''{var_name}'' -Value ''{var_value}'' -Type ExpandString\"' -Verb RunAs -Wait"
+                    ]
+                    
+                    result = subprocess.run(ps_command, timeout=60, capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        logger.info(f"✅ Set {var_name} as system environment variable with elevation")
+                    else:
+                        logger.error("Failed to set system environment variable with elevation")
+                        return False
+                        
+                except Exception as e:
+                    logger.error(f"Failed to elevate for system environment variable: {e}")
+                    return False
+            
+            # Notify system of environment change
+            try:
+                # Broadcast WM_SETTINGCHANGE message
+                HWND_BROADCAST = 0xFFFF
+                WM_SETTINGCHANGE = 0x001A
+                SMTO_ABORTIFHUNG = 0x0002
+                
+                ctypes.windll.user32.SendMessageTimeoutW(
+                    HWND_BROADCAST,
+                    WM_SETTINGCHANGE,
+                    0,
+                    "Environment",
+                    SMTO_ABORTIFHUNG,
+                    5000,
+                    None
+                )
+                logger.debug(f"Broadcasted system environment change for {var_name}")
+            except Exception as e:
+                logger.debug(f"Failed to broadcast environment change: {e}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to set environment variable: {e}")
+            return False
+    
+    
+    # End of DownloadManager class

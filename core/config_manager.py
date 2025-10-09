@@ -11,7 +11,7 @@ class ConfigManager:
     
     # GitHub configuration for fetching config
     GITHUB_REPO = "Conv-AI/Convai-UnrealEngine-ModdingTool"
-    GITHUB_BRANCH = "main"
+    GITHUB_BRANCH = "feat/asset-migration"
     CONFIG_FILE_PATH = "resources/modding_tool_config.json"
     
     def __new__(cls):
@@ -89,7 +89,7 @@ class ConfigManager:
         keys = key_path.split('.')
         value = self._config
         
-        for key in keys:
+        for i, key in enumerate(keys):
             if isinstance(value, dict) and key in value:
                 value = value[key]
             else:
@@ -111,9 +111,48 @@ class ConfigManager:
         logger.warning(f"version data is not valid returning 5.6 as target ue version")
         return '5.6'
     
-    def get_cross_compilation_toolchain(self) -> str:
-        """Get cross-compilation toolchain version."""
-        return self.get('cross_compilation.toolchain_version', 'v23_clang-18.1.0-rockylinux8')
+    def get_cross_compilation_toolchain(self, ue_version: str = None) -> str:
+        """Get cross-compilation toolchain version for a specific UE version."""
+        if ue_version is None:
+            ue_version = self.get_current_unreal_engine_version()
+        
+        # Convert version format from "5.6" to "5_6" for JSON key lookup
+        version_key = ue_version.replace('.', '_')
+        lookup_path = f'cross_compilation.toolchain_versions.{version_key}'
+        
+        result = self.get(lookup_path, 'v23_clang-18.1.0-rockylinux8')
+        
+        return result
+    
+    def get_cross_compilation_toolchain_url(self, toolchain_version: str) -> str:
+        """Get download URL for a specific toolchain version."""
+        lookup_path = f'cross_compilation.toolchain_download_urls.{toolchain_version}'
+        
+        result = self.get(lookup_path, '')
+        
+        # Fallback URLs if not found in config (temporary fix for GitHub config typos)
+        if not result:
+            fallback_urls = {
+                'v23_clang-18.1.0-rockylinux8': 'https://cdn.unrealengine.com/CrossToolchain_Linux/v23_clang-18.1.0-rockylinux8.exe',
+                'v25_clang-18.1.0-rockylinux8': 'https://cdn.unrealengine.com/CrossToolchain_Linux/v25_clang-18.1.0-rockylinux8.exe'
+            }
+            result = fallback_urls.get(toolchain_version, '')
+            if result:
+                logger.info(f"🔄 Using fallback URL for {toolchain_version}")
+        
+        return result   
+    
+    def get_cross_compilation_download_directory(self) -> str:
+        """Get cross-compilation toolchain download directory (for .exe installers)."""
+        import os
+        directory = self.get('cross_compilation.toolchain_download_directory', '%APPDATA%\\ConvaiModdingTool\\Downloads')
+        # Expand environment variables like %APPDATA%
+        return os.path.expandvars(directory)
+    
+    def get_cross_compilation_install_directory(self) -> str:
+        """Get cross-compilation toolchain installation directory (for extracted toolchains)."""
+        # This is typically a system-wide directory like C:\UnrealToolchains
+        return self.get('cross_compilation.toolchain_install_directory', 'C:\\UnrealToolchains')
     
     def get_cross_compilation_env_var(self) -> str:
         """Get cross-compilation environment variable name."""

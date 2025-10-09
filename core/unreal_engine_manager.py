@@ -161,7 +161,7 @@ class UnrealEngineManager:
         shutil.copytree(template, self.project_dir)
         os.makedirs(os.path.join(self.project_dir, 'Content'), exist_ok=True)
         FileUtilityManager.update_directory_structure(self.project_dir, "TP_Blank", self.project_name)
-        self._set_engine_version(
+        UnrealEngineManager.set_engine_version(
             os.path.join(self.project_dir, f"{self.project_name}.uproject"),
             self.engine_version
         )
@@ -316,7 +316,7 @@ class UnrealEngineManager:
         """
         Verifies that all prerequisites for creating a modding project are met.
         Checks Unreal Engine version and cross-compilation toolchain.
-        Exits the process with an error message if any check fails.
+        Downloads and installs toolchain if missing.
         """
         # Engine version check
         if not self.engine_version or not UnrealEngineManager.is_current_engine_version(self.engine_version):
@@ -324,56 +324,76 @@ class UnrealEngineManager:
             logger.error(f"Unreal Engine version {self.engine_version} is not supported. Supported versions: {supported_versions}")
             return False
 
-        # Cross-compilation toolchain check
-        env_var = config.get_cross_compilation_env_var()
-        toolchain_root = os.environ.get(env_var)          
-        required_version = config.get_cross_compilation_toolchain()
+        # Cross-compilation toolchain check with auto-download
+        from core.download_utils import DownloadManager
         
-        if not toolchain_root:
-            logger.error(f"{env_var} environment variable is not set")
+        current_ue_version = config.get_current_unreal_engine_version()
+        logger.step(f"Ensuring toolchain for UE {current_ue_version}...")
+        
+        if not DownloadManager.ensure_toolchain_for_version(current_ue_version):
+            logger.error(f"Failed to ensure toolchain for UE {current_ue_version}")
+            logger.error("Cannot create modding project without cross-compilation toolchain")
             return False
         
-        basename = os.path.basename(toolchain_root.strip("\\/"))        
-        if basename != required_version:
-            logger.error(f"Cross-compilation toolchain version mismatch. Found '{basename}', expected '{required_version}'")
-            return False
-        
-        if not os.path.exists(toolchain_root):
-            logger.error(f"Toolchain path does not exist: {toolchain_root}")
-            return False
-        
+        logger.success(f"All prerequisites met for UE {current_ue_version} modding project")
         return True
     
+    def update_existing_project(self, asset_type: str, is_metahuman: bool, plugin_name: str, api_key: str) -> bool:
+        """
+        Update an existing modding project with current dependencies and configuration.
+        
+        Args:
+            asset_type: Type of asset (scene/avatar)
+            is_metahuman: Whether the project uses MetaHuman
+            plugin_name: Name of the content plugin
+            api_key: Convai API key
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            logger.step("Checking project engine version...")
+            if not self.update_project_engine_version():
+                logger.warning("Failed to update project engine version, but continuing...")
+            
+            logger.step("Updating Convai dependencies...")
+            self.update_modding_dependencies()
+            
+            logger.step("Configuring project assets...")
+            self.configure_assets_in_project(asset_type, is_metahuman)
+            
+            self.update_ini_files(plugin_name, api_key)
+                        
+            logger.success("Project updated successfully!")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update project: {e}")
+            return False
+        
     def can_create_migrated_project(self) -> bool:
         """
         Verifies that all prerequisites for creating/building a migrated project are met.
         Checks target Unreal Engine version and cross-compilation toolchain for target version.
         """
+        from core.download_utils import DownloadManager
+        
         # Engine version check for target version
         if not self.engine_version or not UnrealEngineManager.is_target_engine_version(self.engine_version):
             target_version = config.get_target_unreal_engine_version()
             logger.error(f"Unreal Engine version {self.engine_version} is not the target version. Expected target version: {target_version}")
             return False
 
-        # Cross-compilation toolchain check (may be different for target version)
-        env_var = config.get_cross_compilation_env_var()
-        toolchain_root = os.environ.get(env_var)          
-        required_version = config.get_cross_compilation_toolchain()
+        # Cross-compilation toolchain check and setup for target version
+        target_ue_version = config.get_target_unreal_engine_version()
+        logger.step(f"Ensuring toolchain for target UE {target_ue_version}...")
         
-        if not toolchain_root:
-            logger.error(f"{env_var} environment variable is not set for target UE version")
+        if not DownloadManager.ensure_toolchain_for_version(target_ue_version):
+            logger.error(f"Failed to ensure toolchain for UE {target_ue_version}")
+            logger.error("Cannot create migrated project without cross-compilation toolchain")
             return False
         
-        basename = os.path.basename(toolchain_root.strip("\\/"))        
-        if basename != required_version:
-            logger.error(f"Cross-compilation toolchain version mismatch for target UE. Found '{basename}', expected '{required_version}'")
-            return False
-        
-        if not os.path.exists(toolchain_root):
-            logger.error(f"Toolchain path does not exist for target UE: {toolchain_root}")
-            return False
-        
-        logger.info(f"Target UE version {self.engine_version} validation passed")
+        logger.success(f"All prerequisites met for target UE {target_ue_version} migrated project")
         return True
     
     def remove_metahuman_folder(self) -> None:
@@ -457,15 +477,34 @@ class UnrealEngineManager:
         return bool(ver and UnrealEngineManager.is_target_engine_version(ver))
 
     @staticmethod
-    def _set_engine_version(uproject_file: str, engine_version: str) -> None:
+    def set_engine_version(uproject_file_path: str, engine_version: str) -> bool:
+        """
+        Set the engine version in a .uproject file.
+        
+        Args:
+            uproject_file_path: Full path to the .uproject file
+            engine_version: Target UE version (e.g., "5.6")
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        import json
+        import os
+        
+        if not os.path.exists(uproject_file_path):
+            logger.error(f"Project file not found: {uproject_file_path}")
+            return False
+            
         try:
-            with open(uproject_file, 'r', encoding='utf-8') as f:
+            with open(uproject_file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             data['EngineAssociation'] = engine_version
-            with open(uproject_file, 'w', encoding='utf-8') as f:
+            with open(uproject_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
+            return True
         except Exception as e:
-            logger.error(f"Error updating .uproject file: {e}")
+            logger.error(f"Failed to update .uproject file: {e}")
+            return False
 
     @staticmethod
     def _get_project_engine_version(uproject_file: str) -> str:
@@ -514,9 +553,11 @@ class UnrealEngineManager:
         else:
             logger.step(f"Setting project engine version to {target_version}...")
             
-        self._set_engine_version(uproject_file, target_version)
-        logger.success(f"Updated project to Unreal Engine {target_version}")
-        return True
+        if UnrealEngineManager.set_engine_version(uproject_file, target_version):
+            logger.success(f"Updated project to Unreal Engine {target_version}")
+            return True
+        else:
+            return False
 
     @staticmethod
     def _enable_plugin(

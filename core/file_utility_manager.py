@@ -572,3 +572,60 @@ class FileUtilityManager:
         except Exception as e:
             logger.error(f"Failed to update UBT BuildConfiguration.xml: {e}")
             return False
+    
+    @staticmethod
+    def validate_migration_requirements(original_project_name: str) -> tuple[bool, str, str]:
+        """
+        Validate requirements for project migration.
+        
+        Args:
+            original_project_name: Name of the project to migrate
+            
+        Returns:
+            Tuple of (is_valid, current_ue_version, target_ue_version)
+        """
+        if not original_project_name:
+            logger.error("Project name not found in metadata. This project may not have been created with the modding tool.")
+            return False, "", ""
+
+        # Get versions and check if migration is needed
+        logger.step("Getting target Unreal Engine version...")
+        target_ue_version = config.get_target_unreal_engine_version()
+        current_ue_version = config.get_current_unreal_engine_version()
+        
+        logger.info(f"Current UE version: {current_ue_version}")
+        logger.info(f"Target UE version: {target_ue_version}")
+        
+        if current_ue_version == target_ue_version:
+            logger.info(f"Current and target UE versions are the same ({current_ue_version})")
+            logger.success("No migration needed! Project is already using the target UE version.")
+            return False, current_ue_version, target_ue_version
+        
+        return True, current_ue_version, target_ue_version
+    
+    @staticmethod
+    def create_migrated_project_copy(original_project_dir: str, original_project_name: str, target_ue_version: str, script_dir: str) -> tuple[bool, str, str]:
+        """
+        Create a copy of the project for migration.
+        
+        Args:
+            original_project_dir: Path to original project
+            original_project_name: Name of the original project
+            target_ue_version: Target UE version
+            script_dir: Script directory path
+            
+        Returns:
+            Tuple of (success, migrated_directory_name, migrated_project_dir)
+        """
+        import os
+        
+        # Create the copied directory with naming format OriginalProjectName_TargetUEVersion
+        migrated_directory_name = f"{original_project_name}_{target_ue_version}"
+        migrated_project_dir = os.path.join(script_dir, migrated_directory_name)
+        
+        logger.step(f"Creating copy of project for migration: {migrated_directory_name}")
+        if not FileUtilityManager.copy_directory(original_project_dir, migrated_project_dir):
+            logger.error("Failed to create project copy for migration")
+            return False, "", ""
+        
+        return True, migrated_directory_name, migrated_project_dir
