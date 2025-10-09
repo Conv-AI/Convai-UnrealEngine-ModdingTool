@@ -8,6 +8,7 @@
             "v23_clang-18.1.0-rockylinux8": "https://cdn.unrealengine.com/CrossToolchain_Linux/v23_clang-18.1.0-rockylinux8.exe",
             "v25_clang-18.1.0-rockylinux8": "https://cdn.unrealengine.com/CrossToolchain_Linux/v25_clang-18.1.0-rockylinux8.exe"
         },
+        "toolchain_download_directory": "%APPDATA%\\ConvaiModdingTool\\Downloads",
         "toolchain_install_directory": "C:\\UnrealToolchains",
         "environment_variable": "LINUX_MULTIARCH_ROOT"
     },
