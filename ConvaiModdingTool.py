@@ -11,7 +11,7 @@ from core.unreal_engine_manager import UnrealEngineManager
 from core.logger import logger, suppress_external_logging
 from core.version_manager import VersionManager
 
-TOOL_VERSION = "3.0.0"
+TOOL_VERSION = "3.0.1"
 
 def get_script_dir():
     if getattr(sys, 'frozen', False):
