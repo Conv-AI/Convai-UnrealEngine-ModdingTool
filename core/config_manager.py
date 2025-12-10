@@ -107,9 +107,9 @@ class ConfigManager:
     def get_target_unreal_engine_version(self) -> str:
         """Get target Unreal Engine version from cached version data."""
         if self._version_data:
-            return self._version_data.get('target-ue-version', '5.6')
-        logger.warning(f"version data is not valid returning 5.6 as target ue version")
-        return '5.6'
+            return self._version_data.get('target-ue-version', '5.7')
+        logger.warning(f"version data is not valid returning 5.7 as target ue version")
+        return '5.7'
     
     def get_cross_compilation_toolchain(self, ue_version: str = None) -> str:
         """Get cross-compilation toolchain version for a specific UE version."""
