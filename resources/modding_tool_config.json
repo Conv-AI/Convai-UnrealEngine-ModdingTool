@@ -2,11 +2,13 @@
     "cross_compilation": {
         "toolchain_versions": {
             "5_5": "v23_clang-18.1.0-rockylinux8",
-            "5_6": "v25_clang-18.1.0-rockylinux8"
+            "5_6": "v25_clang-18.1.0-rockylinux8",
+            "5_7": "v26_clang-20.1.8-rockylinux8"
         },
         "toolchain_download_urls": {
             "v23_clang-18.1.0-rockylinux8": "https://cdn.unrealengine.com/CrossToolchain_Linux/v23_clang-18.1.0-rockylinux8.exe",
-            "v25_clang-18.1.0-rockylinux8": "https://cdn.unrealengine.com/CrossToolchain_Linux/v25_clang-18.1.0-rockylinux8.exe"
+            "v25_clang-18.1.0-rockylinux8": "https://cdn.unrealengine.com/CrossToolchain_Linux/v25_clang-18.1.0-rockylinux8.exe",
+            "v26_clang-20.1.8-rockylinux8": "https://cdn.unrealengine.com/CrossToolchain_Linux/v26_clang-20.1.8-rockylinux8.exe"
         },
         "toolchain_download_directory": "%APPDATA%\\ConvaiModdingTool\\Downloads",
         "toolchain_install_directory": "C:\\UnrealToolchains",
