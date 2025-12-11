@@ -11,7 +11,7 @@ class ConfigManager:
     
     # GitHub configuration for fetching config
     GITHUB_REPO = "Conv-AI/Convai-UnrealEngine-ModdingTool"
-    GITHUB_BRANCH = "feat/asset-migration"
+    GITHUB_BRANCH = "main"
     CONFIG_FILE_PATH = "resources/modding_tool_config.json"
     
     def __new__(cls):
