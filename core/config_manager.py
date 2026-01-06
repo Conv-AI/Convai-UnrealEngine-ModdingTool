@@ -1,114 +1,101 @@
 import json
+import time
 import requests
+from dataclasses import dataclass
 from typing import Dict, List, Any, Optional
 
 from core.logger import logger
+from core.exceptions import ConfigurationError
+
+
+@dataclass(frozen=True)
+class RemoteConfig:
+    """Immutable configuration loaded from remote source."""
+    config: Dict[str, Any]
+    version_data: Dict[str, Any]
+
 
 class ConfigManager:
     """Manages configuration settings for the Convai Modding Tool."""
     
-    _instance = None
+    _instance: Optional['ConfigManager'] = None
     
     # GitHub configuration for fetching config
     GITHUB_REPO = "Conv-AI/Convai-UnrealEngine-ModdingTool"
     GITHUB_BRANCH = "main"
     CONFIG_FILE_PATH = "resources/modding_tool_config.json"
+    VERSION_FILE_PATH = "Version.json"
     
-    def __new__(cls):
+    def __new__(cls) -> 'ConfigManager':
         if cls._instance is None:
-            cls._instance = super(ConfigManager, cls).__new__(cls)
-            cls._instance._initialize_config()
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
         return cls._instance
     
-    def _initialize_config(self, max_attempts: int = 5):
-        """Initialize configuration with retry logic."""
-        self._config = None
-        self._version_data = None
-        
-        # First, load config with max attempts
-        for attempt in range(max_attempts):
-            try:
-                self._config = self._load_config_from_github()
-                if self._config:
-                    break
-                
-            except Exception as e:
-                if attempt == max_attempts - 1:
-                    logger.error(f"Configuration load failed after {max_attempts} attempts: {e}")
-        
-        # If config loading failed completely, raise error
-        if not self._config:
-            raise RuntimeError(f"Could not load configuration after {max_attempts} attempts. Please ensure GitHub is accessible.")
-        
-        # Then, load version data with max attempts
-        for attempt in range(max_attempts):
-            try:
-                self._version_data = self._load_version_from_github()
-                if self._version_data:
-                    break
-                
-            except Exception as e:
-                if attempt == max_attempts - 1:
-                    logger.error(f"Version data load failed after {max_attempts} attempts: {e}")
+    def __init__(self, max_attempts: int = 5, timeout: int = 30):
+        if self._initialized:
+            return
+        self._max_attempts = max_attempts
+        self._timeout = timeout
+        self._remote_config = self._load_remote_config()
+        self._initialized = True
     
-    def _load_config_from_github(self) -> Optional[Dict]:
-        """Load configuration from GitHub repository using raw URL."""
-        try:            
-            raw_url = f"https://raw.githubusercontent.com/{self.GITHUB_REPO}/{self.GITHUB_BRANCH}/{self.CONFIG_FILE_PATH}"
-            
-            response = requests.get(raw_url, timeout=30)
-            response.raise_for_status()
-            
-            return json.loads(response.text)
-                
-        except Exception as e:
-            logger.debug(f"Failed to load config from GitHub: {e}")
+    def _load_remote_config(self) -> RemoteConfig:
+        """Load configuration with retry logic."""
+        config_data = self._fetch_json(self.CONFIG_FILE_PATH)
+        if not config_data:
+            raise ConfigurationError(
+                f"Failed to load config after {self._max_attempts} attempts. "
+                "Please ensure GitHub is accessible."
+            )
         
+        version_data = self._fetch_json(self.VERSION_FILE_PATH) or {}
+        return RemoteConfig(config=config_data, version_data=version_data)
+    
+    def _fetch_json(self, file_path: str) -> Optional[Dict[str, Any]]:
+        """Fetch JSON from GitHub with retry logic and exponential backoff."""
+        url = f"https://raw.githubusercontent.com/{self.GITHUB_REPO}/{self.GITHUB_BRANCH}/{file_path}"
+        
+        for attempt in range(self._max_attempts):
+            try:
+                response = requests.get(url, timeout=self._timeout)
+                response.raise_for_status()
+                return response.json()
+            except (requests.RequestException, json.JSONDecodeError) as e:
+                logger.debug(f"Attempt {attempt + 1} failed for {file_path}: {e}")
+                if attempt < self._max_attempts - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s, 8s
         return None
     
-    def _load_version_from_github(self) -> Optional[Dict]:
-        """Load version data from Version.json on GitHub using raw URL."""
-        try:            
-            raw_url = f"https://raw.githubusercontent.com/{self.GITHUB_REPO}/{self.GITHUB_BRANCH}/Version.json"
-            
-            response = requests.get(raw_url, timeout=30)
-            response.raise_for_status()
-            
-            return json.loads(response.text)
-                
-        except Exception as e:
-            logger.debug(f"Failed to load version data from GitHub: {e}")
-        
-        return None
-        
-    def get(self, key_path: str, default=None) -> Any:
+    def get(self, key_path: str, default: Any = None) -> Any:
         """
         Get configuration value using dot notation.
         Example: get('unreal_engine.current_version')
         """
         keys = key_path.split('.')
-        value = self._config
+        value = self._remote_config.config
         
-        for i, key in enumerate(keys):
-            if isinstance(value, dict) and key in value:
-                value = value[key]
-            else:
+        for key in keys:
+            if not isinstance(value, dict) or key not in value:
                 return default
+            value = value[key]
         
         return value
     
     def get_current_unreal_engine_version(self) -> str:
         """Get current Unreal Engine version from cached version data."""
-        if self._version_data:
-            return self._version_data.get('current-ue-version', '5.5')
-        logger.warning(f"version data is not valid returning 5.5 as ue version")
+        version = self._remote_config.version_data.get('current-ue-version')
+        if version:
+            return version
+        logger.warning("Version data is not valid, returning 5.5 as UE version")
         return '5.5'
     
     def get_target_unreal_engine_version(self) -> str:
         """Get target Unreal Engine version from cached version data."""
-        if self._version_data:
-            return self._version_data.get('target-ue-version', '5.7')
-        logger.warning(f"version data is not valid returning 5.7 as target ue version")
+        version = self._remote_config.version_data.get('target-ue-version')
+        if version:
+            return version
+        logger.warning("Version data is not valid, returning 5.7 as target UE version")
         return '5.7'
     
     def get_cross_compilation_toolchain(self, ue_version: str = None) -> str:
@@ -120,17 +107,14 @@ class ConfigManager:
         version_key = ue_version.replace('.', '_')
         lookup_path = f'cross_compilation.toolchain_versions.{version_key}'
         
-        result = self.get(lookup_path, 'v23_clang-18.1.0-rockylinux8')
-        
-        return result
+        return self.get(lookup_path, 'v23_clang-18.1.0-rockylinux8')
     
     def get_cross_compilation_toolchain_url(self, toolchain_version: str) -> str:
         """Get download URL for a specific toolchain version."""
         lookup_path = f'cross_compilation.toolchain_download_urls.{toolchain_version}'
-        
         result = self.get(lookup_path, '')
         
-        # Fallback URLs if not found in config (temporary fix for GitHub config typos)
+        # Fallback URLs if not found in config
         if not result:
             fallback_urls = {
                 'v23_clang-18.1.0-rockylinux8': 'https://cdn.unrealengine.com/CrossToolchain_Linux/v23_clang-18.1.0-rockylinux8.exe',
@@ -140,18 +124,16 @@ class ConfigManager:
             if result:
                 logger.info(f"🔄 Using fallback URL for {toolchain_version}")
         
-        return result   
+        return result
     
     def get_cross_compilation_download_directory(self) -> str:
         """Get cross-compilation toolchain download directory (for .exe installers)."""
         import os
         directory = self.get('cross_compilation.toolchain_download_directory', '%APPDATA%\\ConvaiModdingTool\\Downloads')
-        # Expand environment variables like %APPDATA%
         return os.path.expandvars(directory)
     
     def get_cross_compilation_install_directory(self) -> str:
         """Get cross-compilation toolchain installation directory (for extracted toolchains)."""
-        # This is typically a system-wide directory like C:\UnrealToolchains
         return self.get('cross_compilation.toolchain_install_directory', 'C:\\UnrealToolchains')
     
     def get_cross_compilation_env_var(self) -> str:
@@ -184,7 +166,7 @@ class ConfigManager:
         return self.get('project_settings.required_plugins', [])
     
     def get_metahuman_plugins(self) -> List[str]:
-        """Get list of required plugins."""
+        """Get list of MetaHuman plugins."""
         return self.get('project_settings.metahuman_plugins', [])
     
     def get_max_project_name_length(self) -> int:
@@ -280,5 +262,6 @@ class ConfigManager:
         """Get UBT XML configuration element name."""
         return self.get('ubt_configuration.xml_template.config_element', 'BuildConfiguration')
 
+
 # Singleton instance
-config = ConfigManager() 
+config = ConfigManager()
