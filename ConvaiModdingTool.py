@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 import sys
-import json
 
 from core.config_manager import config
 from core.download_utils import DownloadManager

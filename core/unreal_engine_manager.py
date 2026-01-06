@@ -453,14 +453,6 @@ class UnrealEngineManager:
         return engine_version == config.get_target_unreal_engine_version()
 
     @staticmethod
-    def is_valid_engine_path(path: Path) -> bool:
-        """Check if the given path is a valid Unreal Engine installation (any version)."""
-        if not path.exists():
-            return False
-        ver = UnrealEngineManager._extract_engine_version(str(path))
-        return bool(ver)
-    
-    @staticmethod
     def is_valid_current_engine_path(path: Path) -> bool:
         """Check if the given path is a valid current UE version installation."""
         if not path.exists():
@@ -488,9 +480,6 @@ class UnrealEngineManager:
         Returns:
             True if update successful, False otherwise
         """
-        import json
-        import os
-        
         if not os.path.exists(uproject_file_path):
             logger.error(f"Project file not found: {uproject_file_path}")
             return False
