@@ -572,7 +572,7 @@ class UnrealEngineManager:
             return False
 
     @staticmethod
-    def _update_game_ini(project_dir, plugin_name):
+    def _update_game_ini(project_dir: str, plugin_name: str) -> None:
         """
         Ensures required settings exist in DefaultGame.ini by overriding existing scalar keys
         and de-duplicating array-style (+/-) entries within their sections.
@@ -618,7 +618,7 @@ MetaDataTagsForAssetRegistry=()
         logger.debug(f"Merged DefaultGame.ini with plugin: {plugin_name}")
 
     @staticmethod
-    def _update_engine_ini(project_dir, convai_api_key):
+    def _update_engine_ini(project_dir: str, convai_api_key: str) -> None:
         """
         Ensures required settings exist in DefaultEngine.ini by overriding existing scalar keys
         and de-duplicating array-style (+/-) entries within their sections.
@@ -849,7 +849,7 @@ API_Key={convai_api_key}
         logger.debug("Merged DefaultEngine.ini with required settings and API key")
     
     @staticmethod
-    def _update_input_ini(project_dir):
+    def _update_input_ini(project_dir: str) -> None:
         config_dir = os.path.join(project_dir, config.get_config_dir_name())
         os.makedirs(config_dir, exist_ok=True)
         default_input_ini_path = os.path.join(config_dir, config.get_config_file_name("default_input"))

@@ -8,7 +8,7 @@ import shutil
 import uuid
 import xml.etree.ElementTree as ET
 import zipfile
-from typing import Dict, Any
+from typing import Any, Dict, List, Optional
 
 from core.config_manager import config
 from core.exceptions import ConfigurationError
@@ -78,12 +78,12 @@ class FileUtilityManager:
         return str(uuid.uuid4())
 
     @staticmethod
-    def trim_unique_str(str: str) -> str:
+    def trim_unique_str(value: str) -> str:
         """
         Generate a 20-character Unreal Engine-compatible project name from the asset ID.
         Ensures that the name starts with a letter (A-Z).
         """
-        hash_object = hashlib.sha256(str.encode())  # Hash the asset ID
+        hash_object = hashlib.sha256(value.encode())  # Hash the asset ID
         base32_encoded = base64.b32encode(hash_object.digest()).decode()  # Base32 encoding (A-Z, 2-7)
         project_name = base32_encoded[:20]  # Truncate to 20 characters
 
@@ -94,7 +94,7 @@ class FileUtilityManager:
         return project_name
 
     @staticmethod
-    def delete_directory_if_exists(directory_path):
+    def delete_directory_if_exists(directory_path: str) -> None:
         """
         Deletes the specified directory if it exists.
         """
@@ -106,7 +106,7 @@ class FileUtilityManager:
                 logger.error(f"Failed to delete directory {directory_path}: {e}")
 
     @staticmethod 
-    def delete_file_if_exists(file_path):
+    def delete_file_if_exists(file_path: str) -> None:
         """
         Deletes a file if it exists.
 
@@ -126,7 +126,7 @@ class FileUtilityManager:
             logger.debug(f"File not found (already deleted): {file_path}")
         
     @staticmethod 
-    def delete_paths(paths_to_delete):
+    def delete_paths(paths_to_delete: List[str]) -> None:
         """Delete files or directories based on their type."""
         for path_pattern in paths_to_delete:
             for matched_path in glob.glob(path_pattern):
@@ -138,7 +138,7 @@ class FileUtilityManager:
                     logger.warning(f"Path does not exist or unknown type: {matched_path}")
 
     @staticmethod 
-    def update_file_content(file_path, old_value, new_value):
+    def update_file_content(file_path: str, old_value: str, new_value: str) -> None:
         """
         Replace old_value with new_value in the specified file, preserving case sensitivity.
         """
@@ -159,7 +159,7 @@ class FileUtilityManager:
                 logger.error(f"Error writing to file: {file_path}")
     
     @staticmethod 
-    def rename_file(file_path, old_value, new_value):
+    def rename_file(file_path: str, old_value: str, new_value: str) -> None:
         """
         Rename the file if old_value is part of the file name, preserving case.
         """
@@ -172,7 +172,7 @@ class FileUtilityManager:
                 logger.debug(f"Renamed file: {file_name} -> {new_file_name}")
     
     @staticmethod 
-    def rename_directory(directory, old_value, new_value):
+    def rename_directory(directory: str, old_value: str, new_value: str) -> str:
         """
         Rename directories that contain old_value in their names.
         """
@@ -191,7 +191,7 @@ class FileUtilityManager:
         return directory  # Return the original directory if no renaming occurred
     
     @staticmethod 
-    def is_text_file(file_path):
+    def is_text_file(file_path: str) -> bool:
         """
         Check if the file is a text file based on its extension.
         """
@@ -199,7 +199,7 @@ class FileUtilityManager:
         return os.path.splitext(file_path)[1].lower() in text_extensions
     
     @staticmethod 
-    def update_directory_structure(directory, old_value, new_value):
+    def update_directory_structure(directory: str, old_value: str, new_value: str) -> None:
         """
         Recursively replace old_value with new_value in files and rename directories.
         """
@@ -216,7 +216,7 @@ class FileUtilityManager:
                 FileUtilityManager.rename_directory(dir_path, old_value, new_value)
     
     @staticmethod 
-    def case_preserving_replace(old_value, new_value, text):
+    def case_preserving_replace(old_value: str, new_value: str, text: str) -> str:
         """
         Replace old_value with new_value in the text, preserving the case of the original.
         """
@@ -236,7 +236,7 @@ class FileUtilityManager:
         return re.sub(re.escape(old_value), replace_with_matching_case, text, flags=re.IGNORECASE)
 
     @staticmethod
-    def save_metadata(project_dir, metadata):
+    def save_metadata(project_dir: str, metadata: Dict[str, Any]) -> None:
         """
         Save metadata to ModdingMetaData.txt in the project directory.
         Merges with existing metadata if present (new data takes precedence).
@@ -269,7 +269,7 @@ class FileUtilityManager:
             logger.error(f"Failed to save metadata: {e}")
 
     @staticmethod 
-    def get_metadata(project_dir):
+    def get_metadata(project_dir: str) -> Dict[str, Any]:
         """
         Get metadata from ModdingMetaData.txt in the project directory.
         Returns a dictionary with the metadata, or an empty dict if file doesn't exist or can't be read.
