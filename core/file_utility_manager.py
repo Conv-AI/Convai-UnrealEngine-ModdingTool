@@ -10,8 +10,9 @@ import xml.etree.ElementTree as ET
 import zipfile
 from typing import Dict, Any
 
-from core.logger import logger
 from core.config_manager import config
+from core.exceptions import ConfigurationError
+from core.logger import logger
 
 class FileUtilityManager:
     """Utility methods for filesystem and metadata operations."""
@@ -408,10 +409,10 @@ class FileUtilityManager:
         Checks all required settings defined in the configuration.
         
         Returns:
-            bool: True if configuration is valid, False otherwise
+            bool: True if configuration is valid
             
         Raises:
-            SystemExit: If prerequisite is not met
+            ConfigurationError: If prerequisite is not met
         """
         try:
             config_dict = FileUtilityManager.read_ubt_build_configuration()
@@ -439,14 +440,14 @@ class FileUtilityManager:
                     if not missing_or_incorrect:
                         logger.success("UBT configuration auto-fix applied successfully")
                         return True
-                # If auto-fix failed, guide user and exit
+                # If auto-fix failed, guide user
                 logger.error("PREREQUISITE NOT MET: Failed to auto-fix UBT configuration. Please ensure the following settings exist:")
                 for setting_name, expected_value in required_settings.items():
                     logger.error(f"  - {setting_name} = {expected_value}")
                 logger.error("Expected BuildConfiguration.xml template:")
                 FileUtilityManager._log_ubt_xml_template(required_settings)
                 logger.error(f"File location: {os.environ.get('APPDATA')}/{config.get_ubt_config_appdata_path()}")
-                raise SystemExit("Tool cannot continue without proper UBT configuration")
+                raise ConfigurationError("Tool cannot continue without proper UBT configuration")
             
             return True
             
@@ -458,10 +459,12 @@ class FileUtilityManager:
             logger.error("PREREQUISITE NOT MET: Could not create BuildConfiguration.xml automatically")
             logger.error(f"Please create BuildConfiguration.xml in {os.environ.get('APPDATA')}/{config.get_ubt_config_appdata_path()} with the following content:")
             FileUtilityManager._log_ubt_xml_template(config.get_ubt_required_settings())
-            raise SystemExit("Tool cannot continue without proper UBT configuration")
+            raise ConfigurationError("Tool cannot continue without proper UBT configuration")
+        except ConfigurationError:
+            raise
         except Exception as e:
             logger.error(f"Failed to validate UBT configuration: {e}")
-            raise SystemExit("Tool cannot continue due to UBT configuration validation error")
+            raise ConfigurationError(f"Tool cannot continue due to UBT configuration validation error: {e}")
     
     @staticmethod
     def _log_ubt_xml_template(settings: Dict[str, str]):

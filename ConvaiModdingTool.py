@@ -4,10 +4,11 @@ import sys
 
 from core.config_manager import config
 from core.download_utils import DownloadManager
+from core.exceptions import ConvaiToolError
 from core.file_utility_manager import FileUtilityManager
 from core.input_manager import InputManager
-from core.unreal_engine_manager import UnrealEngineManager
 from core.logger import logger, suppress_external_logging
+from core.unreal_engine_manager import UnrealEngineManager
 from core.version_manager import VersionManager
 
 TOOL_VERSION = "3.0.1"
@@ -189,13 +190,21 @@ def main():
     
     user_choice = input_manager.get_user_flow_choice()
     
-    if user_choice == "create":
-        CreateModdingProject()
-    elif user_choice == "update":
-        UpdateModdingProject()
-    elif user_choice == "migrate":
-        MigrateModdingProject()
+    try:
+        if user_choice == "create":
+            CreateModdingProject()
+        elif user_choice == "update":
+            UpdateModdingProject()
+        elif user_choice == "migrate":
+            MigrateModdingProject()
+    except ConvaiToolError as e:
+        logger.error(f"Operation failed: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
-    input("\nPress Enter to exit...")
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.warning("\nOperation cancelled by user")
+    finally:
+        input("\nPress Enter to exit...")

@@ -567,7 +567,8 @@ class UnrealEngineManager:
             with open(uproject_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
             return True
-        except:
+        except (json.JSONDecodeError, OSError) as e:
+            logger.debug(f"Failed to enable plugin: {e}")
             return False
 
     @staticmethod
