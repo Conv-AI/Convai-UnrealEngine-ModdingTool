@@ -242,8 +242,8 @@ class UnrealEngineManager:
         paths_to_delete = []
         
         # Use find_plugin_directory to locate existing Convai plugins from config
+        # Note: Exclude main Convai plugin from updates - only update helper plugins
         convai_plugin_names = [
-            config.get_plugin_file_name("convai"),
             config.get_plugin_file_name("convai_http"), 
             config.get_plugin_file_name("convai_pak_manager")
         ]
@@ -286,7 +286,8 @@ class UnrealEngineManager:
             FileUtilityManager.delete_paths(zip_files)
         
         logger.step("Downloading latest dependencies...")
-        DownloadManager.download_modding_dependencies(self.project_dir)
+        # Exclude main Convai plugin from updates - only update helper plugins
+        DownloadManager.download_modding_dependencies(self.project_dir, exclude_plugins=["convai_plugin"])
     
     def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
         logger.debug("Configuring project assets...")

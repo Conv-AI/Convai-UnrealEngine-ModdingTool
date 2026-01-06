@@ -178,11 +178,17 @@ class DownloadManager:
             return False
 
     @staticmethod
-    def download_modding_dependencies(project_dir: str) -> None:
-        """Download all configured plugins from GitHub and Google Drive."""
+    def download_modding_dependencies(project_dir: str, exclude_plugins: list[str] = None) -> None:
+        """Download all configured plugins from GitHub and Google Drive.
         
-        # Download all configured GitHub plugins
-        github_plugins = config.get_github_plugins()
+        Args:
+            project_dir: Project directory path
+            exclude_plugins: List of plugin names to exclude from download (e.g., ['convai_plugin'])
+        """
+        exclude_plugins = exclude_plugins or []
+        
+        # Download all configured GitHub plugins (excluding any specified)
+        github_plugins = [p for p in config.get_github_plugins() if p not in exclude_plugins]
         success_count = 0
         
         for i, plugin_name in enumerate(github_plugins, 1):
