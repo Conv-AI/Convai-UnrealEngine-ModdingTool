@@ -239,36 +239,34 @@ class FileUtilityManager:
     def save_metadata(project_dir, metadata):
         """
         Save metadata to ModdingMetaData.txt in the project directory.
+        Merges with existing metadata if present (new data takes precedence).
         """
         essentials_dir = os.path.join(project_dir, config.get_essentials_dir_name())
         metadata_file = os.path.join(essentials_dir, config.get_metadata_file_name())
         
         # Ensure ConvaiEssentials directory exists
-        if not os.path.exists(essentials_dir):
-            os.makedirs(essentials_dir)
+        os.makedirs(essentials_dir, exist_ok=True)
         
-        try:
-            with open(metadata_file, "w", encoding="utf-8") as file:
-                json.dump(metadata, file, indent=4)
-            logger.info(f"Metadata saved to {metadata_file}")
-        except Exception as e:
-            logger.error(f"Failed to save metadata: {e}")
-
-        # For backward compatibility, also check if ModdingMetaData.txt already exists and attempt to read it first
+        # Merge with existing data if present
+        existing_data = {}
         if os.path.exists(metadata_file):
             try:
                 with open(metadata_file, "r", encoding="utf-8") as file:
                     existing_data = json.load(file)
-                # Merge new data with existing data (new data takes precedence)
-                existing_data.update(metadata)
-                with open(metadata_file, "w", encoding="utf-8") as file:
-                    json.dump(existing_data, file, indent=4)
-            except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                logger.warning("Existing metadata file is corrupted or unreadable. Overwriting.")
-                with open(metadata_file, "w", encoding="utf-8") as file:
-                    json.dump(metadata, file, indent=4)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                logger.warning("Existing metadata corrupted, will overwrite")
             except Exception as e:
-                logger.error(f"Unexpected error handling metadata: {e}")
+                logger.error(f"Failed to read existing metadata: {e}")
+        
+        # Merge new data into existing (new data takes precedence)
+        existing_data.update(metadata)
+        
+        try:
+            with open(metadata_file, "w", encoding="utf-8") as file:
+                json.dump(existing_data, file, indent=4)
+            logger.info(f"Metadata saved to {metadata_file}")
+        except Exception as e:
+            logger.error(f"Failed to save metadata: {e}")
 
     @staticmethod 
     def get_metadata(project_dir):
