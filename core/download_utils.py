@@ -1,11 +1,12 @@
 import os
-import zipfile
 import shutil
 import subprocess
-import requests
 import time
+import zipfile
+from typing import Optional
+
 import gdown
-from urllib.parse import unquote
+import requests
 
 from core.config_manager import config
 from core.file_utility_manager import FileUtilityManager
@@ -16,7 +17,7 @@ from core.logger import logger
 class DownloadManager:
     
     @staticmethod
-    def download_from_gdrive(file_id, download_dir, filename):
+    def download_from_gdrive(file_id: str, download_dir: str, filename: str) -> Optional[str]:
         """
         Downloads a file from Google Drive to a specified directory.
 
@@ -24,6 +25,9 @@ class DownloadManager:
         - file_id (str): The Google Drive file ID.
         - download_dir (str): The directory where the file will be downloaded.
         - filename (str): The name of the downloaded file.
+        
+        Returns:
+            Path to downloaded file or None if failed.
         """
 
         if not os.path.exists(download_dir):
@@ -43,19 +47,13 @@ class DownloadManager:
             return None
 
     @staticmethod
-    def download_plugins_from_gdrive_folder(folder_id, project_dir):   
-        download_dir = os.path.join(project_dir, config.get_essentials_dir_name())
-        os.makedirs(download_dir, exist_ok=True)
-        url = f"https://drive.google.com/drive/folders/{folder_id}"
-        gdown.download_folder(url, output=download_dir, use_cookies=False, quiet=True)
+    def extract_plugin_zip(zip_path: str, project_dir: str) -> Optional[str]:
+        """
+        Extracts a plugin ZIP file to the project's Plugins directory.
         
-        for f in os.listdir(download_dir):
-            file_path = os.path.join(download_dir, f)
-            if os.path.isfile(file_path) and f.lower().endswith(".zip"):
-                DownloadManager.extract_plugin_zip(file_path, project_dir)
-
-    @staticmethod
-    def extract_plugin_zip(zip_path, project_dir):
+        Returns:
+            Path to extracted plugin or None if extraction failed.
+        """
         plugins_dir = os.path.join(project_dir, "Plugins")
         os.makedirs(plugins_dir, exist_ok=True)
 
@@ -116,135 +114,6 @@ class DownloadManager:
         finally:
             # Cleanup temporary extraction directory
             shutil.rmtree(temp_dir, ignore_errors=True)
-
-    @staticmethod
-    def download_and_extract_plugin(project_dir):
-        """Download and extract ConvaiPakManager plugin into ProjectDir/Plugins/."""
-        file_id = config.get_google_drive_id("convai_pak_manager_plugin")
-        download_dir = os.path.join(project_dir, config.get_essentials_dir_name())
-        filename = "ConvaiPakManagerPlugin.zip"
-
-        downloaded_file = DownloadManager.download_from_gdrive(file_id, download_dir, filename)
-        if downloaded_file:
-            unzip_destination = os.path.join(project_dir, "Plugins", "ConvaiPakManager")
-            FileUtilityManager.unzip(downloaded_file, unzip_destination)
-
-    @staticmethod
-    def download_latest_github_release(github_repo, download_dir, filename, max_retries=3):
-        """
-        Downloads the latest release ZIP from a given GitHub repository.
-
-        Args:
-        - github_repo (str): GitHub repository in 'owner/repo' format.
-        - download_dir (str): Directory to save the downloaded ZIP.
-        - filename (str): Name of the ZIP file to be saved.
-        - max_retries (int): Number of retry attempts in case of failure.
-
-        Returns:
-        - str: Full path of the downloaded ZIP file or None if failed.
-        """
-
-        github_api_url = f"https://api.github.com/repos/{github_repo}/releases/latest"
-        zip_path = os.path.join(download_dir, filename)
-
-        os.makedirs(download_dir, exist_ok=True)
-
-        for attempt in range(max_retries):
-            try:
-                logger.debug(f"Fetching latest release from {github_repo}, attempt {attempt + 1}...")
-                response = requests.get(github_api_url)
-                response.raise_for_status()
-                release_data = response.json()
-
-                # Find the ZIP download URL
-                zip_url = None
-                for asset in release_data.get("assets", []):
-                    if asset["name"].endswith(".zip"):
-                        zip_url = asset["browser_download_url"]
-                        break
-
-                if not zip_url:
-                    logger.error(f"No ZIP file found in the latest release of {github_repo}")
-                    return None
-
-                logger.debug(f"Downloading {filename}...")
-
-                # Download file in chunks to avoid memory overflow
-                with requests.get(zip_url, stream=True) as r:
-                    r.raise_for_status()
-                    with open(zip_path, "wb") as file:
-                        for chunk in r.iter_content(chunk_size=8192):
-                            file.write(chunk)
-
-                logger.debug(f"Download complete: {filename}")
-                return zip_path
-
-            except requests.RequestException as e:
-                logger.debug(f"Download attempt {attempt + 1} failed: {e}")
-                time.sleep(2)  # Wait before retrying
-
-        logger.error("Download failed after multiple attempts")
-        return None
-
-    @staticmethod
-    def extract_and_install_plugin(zip_path, plugins_dir):
-        """
-        Extracts a ZIP file and moves the plugin correctly into ProjectDir/Plugins/.
-
-        Args:
-        - zip_path (str): Path to the downloaded ZIP file.
-        - plugins_dir (str): Destination directory for the plugin.
-        
-        Returns:
-        - str: Final path of the extracted plugin or None if extraction failed.
-        """
-
-        if not os.path.exists(zip_path):
-            logger.error(f"ZIP file not found: {zip_path}")
-            return None
-
-        # Temporary extraction path inside Plugins directory
-        temp_extraction_path = os.path.join(plugins_dir, "Temp_Extracted_Plugin")
-        os.makedirs(temp_extraction_path, exist_ok=True)
-
-        try:
-            # Extract the ZIP
-            logger.debug(f"Extracting plugin from {os.path.basename(zip_path)}...")
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_extraction_path)
-
-            # Locate the plugin folder that contains the .uplugin file
-            plugin_folder = None
-            for root, dirs, files in os.walk(temp_extraction_path):
-                for file in files:
-                    if file.endswith(".uplugin"):
-                        plugin_folder = root
-                        break
-                if plugin_folder:
-                    break
-
-            if not plugin_folder:
-                logger.error("No .uplugin file found in the extracted content")
-                return None
-
-            # Move the extracted plugin to the Plugins directory
-            final_plugin_path = os.path.join(plugins_dir, os.path.basename(plugin_folder))
-
-            # Remove existing folder if already present
-            if os.path.exists(final_plugin_path):
-                shutil.rmtree(final_plugin_path)
-
-            shutil.move(plugin_folder, final_plugin_path)
-            logger.debug(f"Plugin installed: {os.path.basename(final_plugin_path)}")
-
-            # Cleanup: Remove temporary extraction folder
-            shutil.rmtree(temp_extraction_path, ignore_errors=True)
-
-            return final_plugin_path
-
-        except zipfile.BadZipFile:
-            logger.error("The downloaded file is not a valid ZIP archive")
-            return None
 
     @staticmethod
     def download_plugin_from_github(project_dir: str, plugin_name: str, version: str = None) -> bool:
@@ -309,11 +178,17 @@ class DownloadManager:
             return False
 
     @staticmethod
-    def download_modding_dependencies(project_dir):
-        """Download all configured plugins from GitHub and Google Drive."""
+    def download_modding_dependencies(project_dir: str, exclude_plugins: list[str] = None) -> None:
+        """Download all configured plugins from GitHub and Google Drive.
         
-        # Download all configured GitHub plugins
-        github_plugins = config.get_github_plugins()
+        Args:
+            project_dir: Project directory path
+            exclude_plugins: List of plugin names to exclude from download (e.g., ['convai_plugin'])
+        """
+        exclude_plugins = exclude_plugins or []
+        
+        # Download all configured GitHub plugins (excluding any specified)
+        github_plugins = [p for p in config.get_github_plugins() if p not in exclude_plugins]
         success_count = 0
         
         for i, plugin_name in enumerate(github_plugins, 1):
@@ -329,12 +204,12 @@ class DownloadManager:
             logger.warning(f"Downloaded {success_count}/{len(github_plugins)} dependencies")
         
     @staticmethod
-    def download_convai_realusion_content(project_dir):
+    def download_convai_realusion_content(project_dir: str) -> None:
         DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_reallusion_content"), os.path.join(project_dir, config.get_essentials_dir_name()), "ConvaiRealusionContent.zip")
         FileUtilityManager.unzip(os.path.join(project_dir, config.get_essentials_dir_name(), "ConvaiRealusionContent.zip"), os.path.join(project_dir))
 
     @staticmethod
-    def extract_content_pack(zip_path, project_dir):
+    def extract_content_pack(zip_path: str, project_dir: str) -> Optional[str]:
         """
         Extract a content pack to the project's Content folder.
         

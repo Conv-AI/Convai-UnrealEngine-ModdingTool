@@ -1,6 +1,5 @@
 import logging
 import sys
-from typing import Optional
 
 class ConvaiLogger:
     """Centralized logging for Convai Modding Tool with consistent formatting."""

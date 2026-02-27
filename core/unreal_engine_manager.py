@@ -242,8 +242,8 @@ class UnrealEngineManager:
         paths_to_delete = []
         
         # Use find_plugin_directory to locate existing Convai plugins from config
+        # Note: Exclude main Convai plugin from updates - only update helper plugins
         convai_plugin_names = [
-            config.get_plugin_file_name("convai"),
             config.get_plugin_file_name("convai_http"), 
             config.get_plugin_file_name("convai_pak_manager")
         ]
@@ -286,7 +286,8 @@ class UnrealEngineManager:
             FileUtilityManager.delete_paths(zip_files)
         
         logger.step("Downloading latest dependencies...")
-        DownloadManager.download_modding_dependencies(self.project_dir)
+        # Exclude main Convai plugin from updates - only update helper plugins
+        DownloadManager.download_modding_dependencies(self.project_dir, exclude_plugins=["convai_plugin"])
     
     def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
         logger.debug("Configuring project assets...")
@@ -453,14 +454,6 @@ class UnrealEngineManager:
         return engine_version == config.get_target_unreal_engine_version()
 
     @staticmethod
-    def is_valid_engine_path(path: Path) -> bool:
-        """Check if the given path is a valid Unreal Engine installation (any version)."""
-        if not path.exists():
-            return False
-        ver = UnrealEngineManager._extract_engine_version(str(path))
-        return bool(ver)
-    
-    @staticmethod
     def is_valid_current_engine_path(path: Path) -> bool:
         """Check if the given path is a valid current UE version installation."""
         if not path.exists():
@@ -488,9 +481,6 @@ class UnrealEngineManager:
         Returns:
             True if update successful, False otherwise
         """
-        import json
-        import os
-        
         if not os.path.exists(uproject_file_path):
             logger.error(f"Project file not found: {uproject_file_path}")
             return False
@@ -578,11 +568,12 @@ class UnrealEngineManager:
             with open(uproject_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
             return True
-        except:
+        except (json.JSONDecodeError, OSError) as e:
+            logger.debug(f"Failed to enable plugin: {e}")
             return False
 
     @staticmethod
-    def _update_game_ini(project_dir, plugin_name):
+    def _update_game_ini(project_dir: str, plugin_name: str) -> None:
         """
         Ensures required settings exist in DefaultGame.ini by overriding existing scalar keys
         and de-duplicating array-style (+/-) entries within their sections.
@@ -628,7 +619,7 @@ MetaDataTagsForAssetRegistry=()
         logger.debug(f"Merged DefaultGame.ini with plugin: {plugin_name}")
 
     @staticmethod
-    def _update_engine_ini(project_dir, convai_api_key):
+    def _update_engine_ini(project_dir: str, convai_api_key: str) -> None:
         """
         Ensures required settings exist in DefaultEngine.ini by overriding existing scalar keys
         and de-duplicating array-style (+/-) entries within their sections.
@@ -859,7 +850,7 @@ API_Key={convai_api_key}
         logger.debug("Merged DefaultEngine.ini with required settings and API key")
     
     @staticmethod
-    def _update_input_ini(project_dir):
+    def _update_input_ini(project_dir: str) -> None:
         config_dir = os.path.join(project_dir, config.get_config_dir_name())
         os.makedirs(config_dir, exist_ok=True)
         default_input_ini_path = os.path.join(config_dir, config.get_config_file_name("default_input"))

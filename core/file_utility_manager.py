@@ -1,18 +1,18 @@
 import base64
 import glob
 import hashlib
+import json
 import os
-from pathlib import Path
 import re
 import shutil
-import json
 import uuid
-import zipfile
 import xml.etree.ElementTree as ET
-from typing import Dict, Any
+import zipfile
+from typing import Any, Dict, List, Optional
 
-from core.logger import logger
 from core.config_manager import config
+from core.exceptions import ConfigurationError
+from core.logger import logger
 
 class FileUtilityManager:
     """Utility methods for filesystem and metadata operations."""
@@ -78,12 +78,12 @@ class FileUtilityManager:
         return str(uuid.uuid4())
 
     @staticmethod
-    def trim_unique_str(str: str) -> str:
+    def trim_unique_str(value: str) -> str:
         """
         Generate a 20-character Unreal Engine-compatible project name from the asset ID.
         Ensures that the name starts with a letter (A-Z).
         """
-        hash_object = hashlib.sha256(str.encode())  # Hash the asset ID
+        hash_object = hashlib.sha256(value.encode())  # Hash the asset ID
         base32_encoded = base64.b32encode(hash_object.digest()).decode()  # Base32 encoding (A-Z, 2-7)
         project_name = base32_encoded[:20]  # Truncate to 20 characters
 
@@ -94,7 +94,7 @@ class FileUtilityManager:
         return project_name
 
     @staticmethod
-    def delete_directory_if_exists(directory_path):
+    def delete_directory_if_exists(directory_path: str) -> None:
         """
         Deletes the specified directory if it exists.
         """
@@ -106,7 +106,7 @@ class FileUtilityManager:
                 logger.error(f"Failed to delete directory {directory_path}: {e}")
 
     @staticmethod 
-    def delete_file_if_exists(file_path):
+    def delete_file_if_exists(file_path: str) -> None:
         """
         Deletes a file if it exists.
 
@@ -126,7 +126,7 @@ class FileUtilityManager:
             logger.debug(f"File not found (already deleted): {file_path}")
         
     @staticmethod 
-    def delete_paths(paths_to_delete):
+    def delete_paths(paths_to_delete: List[str]) -> None:
         """Delete files or directories based on their type."""
         for path_pattern in paths_to_delete:
             for matched_path in glob.glob(path_pattern):
@@ -138,7 +138,7 @@ class FileUtilityManager:
                     logger.warning(f"Path does not exist or unknown type: {matched_path}")
 
     @staticmethod 
-    def update_file_content(file_path, old_value, new_value):
+    def update_file_content(file_path: str, old_value: str, new_value: str) -> None:
         """
         Replace old_value with new_value in the specified file, preserving case sensitivity.
         """
@@ -159,7 +159,7 @@ class FileUtilityManager:
                 logger.error(f"Error writing to file: {file_path}")
     
     @staticmethod 
-    def rename_file(file_path, old_value, new_value):
+    def rename_file(file_path: str, old_value: str, new_value: str) -> None:
         """
         Rename the file if old_value is part of the file name, preserving case.
         """
@@ -172,7 +172,7 @@ class FileUtilityManager:
                 logger.debug(f"Renamed file: {file_name} -> {new_file_name}")
     
     @staticmethod 
-    def rename_directory(directory, old_value, new_value):
+    def rename_directory(directory: str, old_value: str, new_value: str) -> str:
         """
         Rename directories that contain old_value in their names.
         """
@@ -191,7 +191,7 @@ class FileUtilityManager:
         return directory  # Return the original directory if no renaming occurred
     
     @staticmethod 
-    def is_text_file(file_path):
+    def is_text_file(file_path: str) -> bool:
         """
         Check if the file is a text file based on its extension.
         """
@@ -199,7 +199,7 @@ class FileUtilityManager:
         return os.path.splitext(file_path)[1].lower() in text_extensions
     
     @staticmethod 
-    def update_directory_structure(directory, old_value, new_value):
+    def update_directory_structure(directory: str, old_value: str, new_value: str) -> None:
         """
         Recursively replace old_value with new_value in files and rename directories.
         """
@@ -216,7 +216,7 @@ class FileUtilityManager:
                 FileUtilityManager.rename_directory(dir_path, old_value, new_value)
     
     @staticmethod 
-    def case_preserving_replace(old_value, new_value, text):
+    def case_preserving_replace(old_value: str, new_value: str, text: str) -> str:
         """
         Replace old_value with new_value in the text, preserving the case of the original.
         """
@@ -236,42 +236,40 @@ class FileUtilityManager:
         return re.sub(re.escape(old_value), replace_with_matching_case, text, flags=re.IGNORECASE)
 
     @staticmethod
-    def save_metadata(project_dir, metadata):
+    def save_metadata(project_dir: str, metadata: Dict[str, Any]) -> None:
         """
         Save metadata to ModdingMetaData.txt in the project directory.
+        Merges with existing metadata if present (new data takes precedence).
         """
         essentials_dir = os.path.join(project_dir, config.get_essentials_dir_name())
         metadata_file = os.path.join(essentials_dir, config.get_metadata_file_name())
         
         # Ensure ConvaiEssentials directory exists
-        if not os.path.exists(essentials_dir):
-            os.makedirs(essentials_dir)
+        os.makedirs(essentials_dir, exist_ok=True)
         
-        try:
-            with open(metadata_file, "w", encoding="utf-8") as file:
-                json.dump(metadata, file, indent=4)
-            logger.info(f"Metadata saved to {metadata_file}")
-        except Exception as e:
-            logger.error(f"Failed to save metadata: {e}")
-
-        # For backward compatibility, also check if ModdingMetaData.txt already exists and attempt to read it first
+        # Merge with existing data if present
+        existing_data = {}
         if os.path.exists(metadata_file):
             try:
                 with open(metadata_file, "r", encoding="utf-8") as file:
                     existing_data = json.load(file)
-                # Merge new data with existing data (new data takes precedence)
-                existing_data.update(metadata)
-                with open(metadata_file, "w", encoding="utf-8") as file:
-                    json.dump(existing_data, file, indent=4)
-            except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                logger.warning("Existing metadata file is corrupted or unreadable. Overwriting.")
-                with open(metadata_file, "w", encoding="utf-8") as file:
-                    json.dump(metadata, file, indent=4)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                logger.warning("Existing metadata corrupted, will overwrite")
             except Exception as e:
-                logger.error(f"Unexpected error handling metadata: {e}")
+                logger.error(f"Failed to read existing metadata: {e}")
+        
+        # Merge new data into existing (new data takes precedence)
+        existing_data.update(metadata)
+        
+        try:
+            with open(metadata_file, "w", encoding="utf-8") as file:
+                json.dump(existing_data, file, indent=4)
+            logger.info(f"Metadata saved to {metadata_file}")
+        except Exception as e:
+            logger.error(f"Failed to save metadata: {e}")
 
     @staticmethod 
-    def get_metadata(project_dir):
+    def get_metadata(project_dir: str) -> Dict[str, Any]:
         """
         Get metadata from ModdingMetaData.txt in the project directory.
         Returns a dictionary with the metadata, or an empty dict if file doesn't exist or can't be read.
@@ -411,10 +409,10 @@ class FileUtilityManager:
         Checks all required settings defined in the configuration.
         
         Returns:
-            bool: True if configuration is valid, False otherwise
+            bool: True if configuration is valid
             
         Raises:
-            SystemExit: If prerequisite is not met
+            ConfigurationError: If prerequisite is not met
         """
         try:
             config_dict = FileUtilityManager.read_ubt_build_configuration()
@@ -442,14 +440,14 @@ class FileUtilityManager:
                     if not missing_or_incorrect:
                         logger.success("UBT configuration auto-fix applied successfully")
                         return True
-                # If auto-fix failed, guide user and exit
+                # If auto-fix failed, guide user
                 logger.error("PREREQUISITE NOT MET: Failed to auto-fix UBT configuration. Please ensure the following settings exist:")
                 for setting_name, expected_value in required_settings.items():
                     logger.error(f"  - {setting_name} = {expected_value}")
                 logger.error("Expected BuildConfiguration.xml template:")
                 FileUtilityManager._log_ubt_xml_template(required_settings)
                 logger.error(f"File location: {os.environ.get('APPDATA')}/{config.get_ubt_config_appdata_path()}")
-                raise SystemExit("Tool cannot continue without proper UBT configuration")
+                raise ConfigurationError("Tool cannot continue without proper UBT configuration")
             
             return True
             
@@ -461,10 +459,12 @@ class FileUtilityManager:
             logger.error("PREREQUISITE NOT MET: Could not create BuildConfiguration.xml automatically")
             logger.error(f"Please create BuildConfiguration.xml in {os.environ.get('APPDATA')}/{config.get_ubt_config_appdata_path()} with the following content:")
             FileUtilityManager._log_ubt_xml_template(config.get_ubt_required_settings())
-            raise SystemExit("Tool cannot continue without proper UBT configuration")
+            raise ConfigurationError("Tool cannot continue without proper UBT configuration")
+        except ConfigurationError:
+            raise
         except Exception as e:
             logger.error(f"Failed to validate UBT configuration: {e}")
-            raise SystemExit("Tool cannot continue due to UBT configuration validation error")
+            raise ConfigurationError(f"Tool cannot continue due to UBT configuration validation error: {e}")
     
     @staticmethod
     def _log_ubt_xml_template(settings: Dict[str, str]):
