@@ -629,3 +629,67 @@ class FileUtilityManager:
             return False, "", ""
         
         return True, migrated_directory_name, migrated_project_dir
+
+    @staticmethod
+    def patch_target_files(uproject_file: str) -> bool:
+        """
+        Patch Target.cs files to use latest build settings and include order.
+        This ensures compatibility when building projects created with older UE versions.
+
+        Updates:
+            - DefaultBuildSettings = BuildSettingsVersion.V* -> BuildSettingsVersion.Latest
+            - IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_* -> EngineIncludeOrderVersion.Latest
+
+        Returns:
+            True if any files were patched, False otherwise
+        """
+        # Get the project's Source directory
+        project_dir = os.path.dirname(uproject_file)
+        source_dir = os.path.join(project_dir, "Source")
+
+        if not os.path.exists(source_dir):
+            logger.warning(f"Source directory not found: {source_dir}")
+            return False
+
+        patched_count = 0
+
+        # Find all Target.cs files
+        for root, _, files in os.walk(source_dir):
+            for file_name in files:
+                if file_name.endswith(".Target.cs"):
+                    target_file = os.path.join(root, file_name)
+                    try:
+                        with open(target_file, 'r', encoding='utf-8') as f:
+                            content = f.read()
+
+                        original_content = content
+
+                        # Replace DefaultBuildSettings = BuildSettingsVersion.V* with Latest
+                        content = re.sub(
+                            r'DefaultBuildSettings\s*=\s*BuildSettingsVersion\.\w+',
+                            'DefaultBuildSettings = BuildSettingsVersion.Latest',
+                            content
+                        )
+
+                        # Replace IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_* with Latest
+                        content = re.sub(
+                            r'IncludeOrderVersion\s*=\s*EngineIncludeOrderVersion\.\w+',
+                            'IncludeOrderVersion = EngineIncludeOrderVersion.Latest',
+                            content
+                        )
+
+                        if content != original_content:
+                            with open(target_file, 'w', encoding='utf-8') as f:
+                                f.write(content)
+                            logger.info(f"Patched Target.cs file: {file_name}")
+                            patched_count += 1
+
+                    except Exception as e:
+                        logger.warning(f"Failed to patch {target_file}: {str(e)}")
+
+        if patched_count > 0:
+            logger.info(f"Patched {patched_count} Target.cs file(s) to use latest build settings")
+        else:
+            logger.info("No Target.cs files needed patching")
+
+        return patched_count > 0

@@ -11,7 +11,7 @@ from core.logger import logger, suppress_external_logging
 from core.unreal_engine_manager import UnrealEngineManager
 from core.version_manager import VersionManager
 
-TOOL_VERSION = "3.0.2"
+TOOL_VERSION = "3.0.3"
 
 def get_script_dir():
     if getattr(sys, 'frozen', False):
@@ -159,6 +159,10 @@ def MigrateModdingProject():
     if not UnrealEngineManager.set_engine_version(uproject_file, target_ue_version):
         return
     logger.success(f"Updated project to Unreal Engine {target_ue_version}")
+
+    # Step 6.5: Patch Target.cs files for newer UE build compatibility
+    logger.step("Patching Target.cs files for target UE build compatibility...")
+    FileUtilityManager.patch_target_files(uproject_file)
     
     # Step 7: Build migrated project (toolchain setup handled in can_create_migrated_project)
     migration_ue_manager = UnrealEngineManager(target_ue_dir, original_project_name, migrated_project_dir)
