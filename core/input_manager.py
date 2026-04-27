@@ -56,10 +56,11 @@ class InputManager:
         if not self._existing_projects:
             return 'create'
         while True:
+            target_ue_version = config.get_target_unreal_engine_version()
             print('\nWhat do you want to do?')
-            print('1. Create a new modding project')
-            print('2. Update an existing modding project')
-            print('3. Migrate an existing modding project to new UE version')
+            print('1. Upload a new asset')
+            print('2. Update an existing asset')
+            print(f'3. Migrate an existing asset to {target_ue_version} UE version')
             choice = input('Enter your choice (1, 2, or 3): ').strip()
             if choice == '1':
                 return 'create'
