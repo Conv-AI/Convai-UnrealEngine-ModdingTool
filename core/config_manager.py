@@ -95,8 +95,8 @@ class ConfigManager:
         version = self._remote_config.version_data.get('target-ue-version')
         if version:
             return version
-        logger.warning("Version data is not valid, returning 5.7 as target UE version")
-        return '5.7'
+        logger.warning("Version data is not valid, returning 5.8 as target UE version")
+        return '5.8'
     
     def get_cross_compilation_toolchain(self, ue_version: str = None) -> str:
         """Get cross-compilation toolchain version for a specific UE version."""
