@@ -130,7 +130,7 @@ def MigrateModdingProject():
     plugin_name = metadata.get("plugin_name")
     
     # Step 2: Validate migration requirements
-    is_migration_needed, current_ue_version, target_ue_version = FileUtilityManager.validate_migration_requirements(original_project_name)
+    is_migration_needed, current_ue_version, target_ue_version = FileUtilityManager.validate_migration_requirements(original_project_name, original_project_dir)
     if not is_migration_needed:
         return
     
