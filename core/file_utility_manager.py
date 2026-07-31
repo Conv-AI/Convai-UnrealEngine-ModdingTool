@@ -574,34 +574,57 @@ class FileUtilityManager:
             return False
     
     @staticmethod
-    def validate_migration_requirements(original_project_name: str) -> tuple[bool, str, str]:
+    def validate_migration_requirements(original_project_name: str, original_project_dir: str) -> tuple[bool, str, str]:
         """
         Validate requirements for project migration.
-        
+
+        Compares the *project's own* engine version (read from its .uproject
+        EngineAssociation) against the configured target UE version — NOT the
+        config's current-vs-target, which are equal on a single-version config
+        and would wrongly report "no migration needed".
+
         Args:
             original_project_name: Name of the project to migrate
-            
+            original_project_dir: Path to the project directory (holds the .uproject)
+
         Returns:
-            Tuple of (is_valid, current_ue_version, target_ue_version)
+            Tuple of (is_valid, project_ue_version, target_ue_version)
         """
         if not original_project_name:
             logger.error("Project name not found in metadata. This project may not have been created with the modding tool.")
             return False, "", ""
 
-        # Get versions and check if migration is needed
         logger.step("Getting target Unreal Engine version...")
         target_ue_version = config.get_target_unreal_engine_version()
-        current_ue_version = config.get_current_unreal_engine_version()
-        
-        logger.info(f"Current UE version: {current_ue_version}")
+
+        # Read the project's actual engine version from its .uproject.
+        project_ue_version = None
+        uproject_file = os.path.join(original_project_dir, f"{original_project_name}.uproject")
+        if os.path.exists(uproject_file):
+            try:
+                with open(uproject_file, 'r', encoding='utf-8') as f:
+                    project_ue_version = json.load(f).get('EngineAssociation')
+            except Exception as e:
+                logger.warning(f"Could not read project engine version from {uproject_file}: {e}")
+        else:
+            logger.warning(f".uproject not found: {uproject_file}")
+
+        logger.info(f"Project UE version: {project_ue_version or 'unknown'}")
         logger.info(f"Target UE version: {target_ue_version}")
-        
-        if current_ue_version == target_ue_version:
-            logger.info(f"Current and target UE versions are the same ({current_ue_version})")
+
+        # EngineAssociation is a GUID for source-built engines; treat anything
+        # that isn't a plain "major.minor" as unknown and proceed with migration.
+        is_plain_version = bool(project_ue_version and re.fullmatch(r"\d+\.\d+", project_ue_version))
+
+        if is_plain_version and project_ue_version == target_ue_version:
+            logger.info(f"Project is already using the target UE version ({target_ue_version})")
             logger.success("No migration needed! Project is already using the target UE version.")
-            return False, current_ue_version, target_ue_version
-        
-        return True, current_ue_version, target_ue_version
+            return False, project_ue_version, target_ue_version
+
+        if not is_plain_version:
+            logger.warning("Could not determine a plain project UE version; proceeding with migration.")
+
+        return True, project_ue_version or "unknown", target_ue_version
     
     @staticmethod
     def create_migrated_project_copy(original_project_dir: str, original_project_name: str, target_ue_version: str, script_dir: str) -> tuple[bool, str, str]:

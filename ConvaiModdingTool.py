@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import sys
 
+from core.compatibility_patcher import patch_source_files
 from core.config_manager import config
 from core.download_utils import DownloadManager
 from core.exceptions import ConvaiToolError
@@ -11,7 +12,7 @@ from core.logger import logger, suppress_external_logging
 from core.unreal_engine_manager import UnrealEngineManager
 from core.version_manager import VersionManager
 
-TOOL_VERSION = "3.0.5"
+TOOL_VERSION = "3.0.6"
 
 def get_script_dir():
     if getattr(sys, 'frozen', False):
@@ -67,10 +68,13 @@ def CreateModdingProject():
     
     logger.step("Configuring project assets...")
     ue_manager.configure_assets_in_project(asset_type, is_metahuman)
-    
+
+    logger.step("Patching plugin source for engine compatibility...")
+    patch_source_files(project_dir, ue_manager.engine_version)
+
     logger.step("Building project...")
     ue_manager.run_unreal_build()
-    
+
     logger.success("Modding project created successfully!")
 
 def UpdateModdingProject():
@@ -98,10 +102,13 @@ def UpdateModdingProject():
     if not ue_manager.update_existing_project(asset_type, is_metahuman, plugin_name, api_key):
         logger.error("Failed to update project")
         return
-    
+
+    logger.step("Patching plugin source for engine compatibility...")
+    patch_source_files(project_dir, ue_manager.engine_version)
+
     logger.step("Building project...")
     ue_manager.run_unreal_build()
-    
+
     logger.success("Modding project updated successfully!")
 
 def MigrateModdingProject():
@@ -123,7 +130,7 @@ def MigrateModdingProject():
     plugin_name = metadata.get("plugin_name")
     
     # Step 2: Validate migration requirements
-    is_migration_needed, current_ue_version, target_ue_version = FileUtilityManager.validate_migration_requirements(original_project_name)
+    is_migration_needed, current_ue_version, target_ue_version = FileUtilityManager.validate_migration_requirements(original_project_name, original_project_dir)
     if not is_migration_needed:
         return
     
@@ -163,7 +170,11 @@ def MigrateModdingProject():
     # Step 6.5: Patch Target.cs files for newer UE build compatibility
     logger.step("Patching Target.cs files for target UE build compatibility...")
     FileUtilityManager.patch_target_files(uproject_file)
-    
+
+    # Step 6.6: Patch embedded ConvAI plugin source for target-engine API breaks
+    logger.step(f"Patching plugin source for Unreal Engine {target_ue_version} compatibility...")
+    patch_source_files(migrated_project_dir, target_ue_version)
+
     # Step 7: Build migrated project (toolchain setup handled in can_create_migrated_project)
     migration_ue_manager = UnrealEngineManager(target_ue_dir, original_project_name, migrated_project_dir)
     
