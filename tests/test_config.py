@@ -107,11 +107,16 @@ def test_check_version_never_prompts():
             lambda *a, **k: '{"modding-tool-version": "3.1.0"}')
         assert VersionManager.check_version("3.1.0") is True
 
+        # A check that could not be made is None, not False: the boot screen sends an
+        # outdated build to the download page, and an unreachable GitHub is not that.
         GitHubManager.get_file_content = staticmethod(lambda *a, **k: None)
-        assert VersionManager.check_version("3.1.0") is False
+        assert VersionManager.check_version("3.1.0") is None
 
         GitHubManager.get_file_content = staticmethod(lambda *a, **k: "not json")
-        assert VersionManager.check_version("3.1.0") is False
+        assert VersionManager.check_version("3.1.0") is None
+
+        GitHubManager.get_file_content = staticmethod(lambda *a, **k: '{"other-key": "3.1.0"}')
+        assert VersionManager.check_version("3.1.0") is None
     finally:
         builtins.input = original_input
         GitHubManager.get_file_content = original_fetch
