@@ -1,10 +1,14 @@
-"""Green/black palette, ttk styles and the widget factory for the GUI."""
+"""Design tokens, ttk styles and scrolling helpers for the GUI.
+
+The palette, type scale and spacing scale come from docs/ui-design.md. Screens read
+tokens through ``theme``, ``FONTS`` and ``SPACE`` rather than repeating literals, so a
+token change lands everywhere at once.
+"""
 
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Callable
 
 
 class Theme:
@@ -12,7 +16,7 @@ class Theme:
 
     Usage:
         from gui.theme import theme
-        background = theme["bg_dark"]
+        background = theme["bg_app"]
     """
 
     _instance: Theme | None = None
@@ -25,30 +29,47 @@ class Theme:
 
     def _init_colors(self) -> None:
         self.colors: dict[str, str] = {
-            # Backgrounds
-            "bg_dark": "#0A0F0C",
-            "bg_card": "#111814",
-            "bg_input": "#18211C",
-            "bg_toolbar": "#050806",
+            # Surfaces, in depth order: canvas, card, selected/input, hover.
+            "bg_app": "#07100A",
+            "bg_surface": "#0E1911",
+            "bg_surface_raised": "#142219",
+            "bg_hover": "#1B3022",
 
             # Borders
-            "border": "#243029",
+            "border_subtle": "#203527",
+            "border_focus": "#42E18B",
 
             # Text
-            "text": "#E4EDE7",
-            "text_muted": "#8FA396",
+            "text_primary": "#EEF7F0",
+            "text_secondary": "#A5B9AA",
+            "text_disabled": "#65796B",
 
-            # Accent colors
-            "accent": "#2FD07A",
-            "accent_hover": "#4FE494",
-            # A bright green is a light colour: text drawn ON the accent has to
-            # be dark. White on #2FD07A is 2.0:1 and unreadable.
-            "on_accent": "#04140B",
+            # Accent
+            "accent": "#35D878",
+            "accent_hover": "#58E996",
+            # A bright green is a light colour: text drawn ON the accent has to be
+            # dark. White on #35D878 is 1.9:1 and unreadable.
+            "accent_ink": "#04130A",
 
-            # Status colors
-            "success": "#2FD07A",
-            "warning": "#E8B339",
-            "error": "#FF6B5E",
+            # Status
+            "warning": "#F0BD45",
+            "danger": "#FF7469",
+
+            # Status pills and inline banners: a tinted surface, its border and the
+            # text colour that stays legible on it.
+            "ok_soft": "#0A2112",
+            "ok_soft_border": "#255A39",
+            "ok_soft_text": "#93EFBB",
+            "warn_soft": "#211B0C",
+            "warn_soft_border": "#4B3B14",
+            "warn_soft_text": "#F6D47F",
+            "danger_soft": "#241010",
+            "danger_soft_border": "#5C2A24",
+            "danger_soft_text": "#FFB3AB",
+
+            # Inputs sit a shade below their surface so the field edge reads without
+            # relying on the border alone.
+            "bg_field": "#09130D",
         }
 
     def __getitem__(self, key: str) -> str:
@@ -58,43 +79,106 @@ class Theme:
 theme = Theme()
 
 
+# Point sizes, not pixels: Tk scales points with the Windows display setting, so the
+# type scale survives 150% scaling where a pixel size would not.
+FONTS: dict[str, tuple] = {
+    "page_title": ("Segoe UI Semibold", 24),
+    "section_title": ("Segoe UI Semibold", 16),
+    "field_title": ("Segoe UI Semibold", 12),
+    "body": ("Segoe UI", 10),
+    "body_strong": ("Segoe UI Semibold", 10),
+    "meta": ("Segoe UI", 9),
+    "meta_strong": ("Segoe UI Semibold", 9),
+    "mono": ("Consolas", 9),
+}
+
+# 8 px grid. `gutter_narrow` is the screen gutter below 1000 px wide.
+SPACE: dict[str, int] = {
+    "gutter": 32,
+    "gutter_narrow": 24,
+    "surface": 20,
+    "tight": 8,
+    "section": 24,
+    "app_bar": 64,
+    "status_bar": 32,
+    "row": 72,
+    "hit": 44,
+    "hit_compact": 36,
+}
+
+# Below this the shell drops to the narrow gutter and stacks the shelf columns.
+NARROW_WIDTH = 1000
+
+
 def apply_styles(root: tk.Misc) -> None:
     """Configure every ttk style the app uses.
 
-    Called once on the root window; ttk styles are process-wide, so all
-    Toplevels inherit them. Anything not styled here falls back to the 'clam'
-    defaults, which are light and look broken against the dark palette --
-    Combobox, Treeview and Scrollbar especially.
+    Called once on the root window; ttk styles are process-wide, so all Toplevels
+    inherit them. Anything not styled here falls back to the 'clam' defaults, which are
+    light and look broken against the dark palette -- Combobox, Treeview and Scrollbar
+    especially.
     """
     c = theme.colors
     style = ttk.Style(root)
     style.theme_use("clam")
 
     # --- containers ---------------------------------------------------------
-    style.configure("TFrame", background=c["bg_dark"])
-    style.configure("Card.TFrame", background=c["bg_card"])
-    style.configure("Toolbar.TFrame", background=c["bg_toolbar"])
+    for name, background in (
+        ("TFrame", c["bg_app"]),
+        ("App.TFrame", c["bg_app"]),
+        ("Surface.TFrame", c["bg_surface"]),
+        ("Raised.TFrame", c["bg_surface_raised"]),
+        ("Field.TFrame", c["bg_field"]),
+        ("OkSoft.TFrame", c["ok_soft"]),
+        ("WarnSoft.TFrame", c["warn_soft"]),
+        ("DangerSoft.TFrame", c["danger_soft"]),
+    ):
+        style.configure(name, background=background)
 
     # --- labels -------------------------------------------------------------
-    style.configure("TLabel", background=c["bg_dark"], foreground=c["text"], font=("Segoe UI", 10))
-    style.configure("Card.TLabel", background=c["bg_card"], foreground=c["text"], font=("Segoe UI", 10))
-    style.configure("Toolbar.TLabel", background=c["bg_toolbar"], foreground=c["text_muted"], font=("Segoe UI", 9))
-    style.configure("Header.TLabel", background=c["bg_card"], foreground=c["accent"], font=("Segoe UI Semibold", 11))
-    style.configure("Title.TLabel", background=c["bg_toolbar"], foreground=c["text"], font=("Segoe UI Semibold", 12))
-    style.configure("Muted.TLabel", background=c["bg_card"], foreground=c["text_muted"], font=("Segoe UI", 9))
-    style.configure("Status.TLabel", background=c["bg_toolbar"], foreground=c["text_muted"], font=("Segoe UI", 9))
-    style.configure("StatusActive.TLabel", background=c["bg_toolbar"], foreground=c["accent"], font=("Segoe UI", 9))
-    style.configure("Step.TLabel", background=c["bg_dark"], foreground=c["text_muted"], font=("Segoe UI Semibold", 9))
-    style.configure("SectionTitle.TLabel", background=c["bg_dark"], foreground=c["text"], font=("Segoe UI Semibold", 11))
+    # One style per (surface, role) pair: ttk resolves a label's background from its
+    # style, not from the frame it happens to be packed into.
+    label_roles = {
+        "": ("text_primary", FONTS["body"]),
+        "Muted.": ("text_secondary", FONTS["body"]),
+        "Meta.": ("text_secondary", FONTS["meta"]),
+        "Title.": ("text_primary", FONTS["page_title"]),
+        "Section.": ("text_primary", FONTS["section_title"]),
+        "Field.": ("text_primary", FONTS["field_title"]),
+        "Strong.": ("text_primary", FONTS["body_strong"]),
+        "Label.": ("text_secondary", FONTS["meta_strong"]),
+        "Disabled.": ("text_disabled", FONTS["body"]),
+        "Warning.": ("warning", FONTS["body"]),
+        "Danger.": ("danger", FONTS["body"]),
+        "Accent.": ("accent", FONTS["body"]),
+    }
+    surfaces = {
+        "TLabel": "bg_app",
+        "OnSurface.TLabel": "bg_surface",
+        "OnRaised.TLabel": "bg_surface_raised",
+        "OnField.TLabel": "bg_field",
+    }
+    for suffix, background in surfaces.items():
+        for prefix, (colour, font) in label_roles.items():
+            style.configure(f"{prefix}{suffix}", background=c[background],
+                            foreground=c[colour], font=font)
+
+    # Pill text sits on its own tint, so it needs its own foregrounds.
+    style.configure("OkPill.TLabel", background=c["ok_soft"], foreground=c["ok_soft_text"], font=FONTS["meta"])
+    style.configure("WarnPill.TLabel", background=c["warn_soft"], foreground=c["warn_soft_text"], font=FONTS["meta"])
+    style.configure("DangerPill.TLabel", background=c["danger_soft"], foreground=c["danger_soft_text"], font=FONTS["meta"])
+    style.configure("OkBanner.TLabel", background=c["ok_soft"], foreground=c["ok_soft_text"], font=FONTS["body"])
+    style.configure("WarnBanner.TLabel", background=c["warn_soft"], foreground=c["warn_soft_text"], font=FONTS["body"])
+    style.configure("DangerBanner.TLabel", background=c["danger_soft"], foreground=c["danger_soft_text"], font=FONTS["body"])
 
     # --- radio / check ------------------------------------------------------
-    style.configure("TRadiobutton", background=c["bg_card"], foreground=c["text"], font=("Segoe UI", 10))
-    style.map("TRadiobutton", background=[("active", c["bg_card"])], foreground=[("active", c["accent"])])
+    style.configure("TRadiobutton", background=c["bg_surface"], foreground=c["text_primary"], font=FONTS["body"])
+    style.map("TRadiobutton", background=[("active", c["bg_surface"])], foreground=[("active", c["accent"])])
 
     # clam draws an unstyled indicator that renders as a crossed box on a dark
     # background -- a ticked option reads as switched off. Colour it explicitly.
     indicator = dict(
-        indicatorbackground=c["bg_input"],
+        indicatorbackground=c["bg_surface_raised"],
         indicatorforeground=c["accent"],
         indicatormargin=(0, 0, 8, 0),
         indicatorrelief="flat",
@@ -103,162 +187,95 @@ def apply_styles(root: tk.Misc) -> None:
     indicator_map = dict(
         indicatorbackground=[
             ("selected", c["accent"]),
-            ("active", c["border"]),
-            ("disabled", c["bg_dark"]),
+            ("active", c["bg_hover"]),
+            ("disabled", c["bg_app"]),
         ],
-        indicatorforeground=[("selected", c["on_accent"]), ("disabled", c["text_muted"])],
+        indicatorforeground=[("selected", c["accent_ink"]), ("disabled", c["text_disabled"])],
     )
 
-    style.configure("TCheckbutton", background=c["bg_card"], foreground=c["text"], font=("Segoe UI", 10), **indicator)
-    style.map(
-        "TCheckbutton",
-        background=[("active", c["bg_card"])],
-        foreground=[("active", c["accent"]), ("disabled", c["text_muted"])],
-        **indicator_map,
-    )
-
-    # --- buttons ------------------------------------------------------------
-    style.configure("Toolbar.TButton", background=c["bg_input"], foreground=c["text"], font=("Segoe UI", 9), padding=(12, 6))
-    style.map("Toolbar.TButton", background=[("active", c["border"]), ("disabled", c["bg_dark"])])
-
-    style.configure("Accent.TButton", background=c["accent"], foreground=c["on_accent"], font=("Segoe UI Semibold", 10), padding=(16, 8))
-    style.map("Accent.TButton", background=[("active", c["accent_hover"]), ("disabled", c["border"])])
-
-    # Segmented control: ttk renders a Radiobutton as a toggle button under the
-    # Toolbutton style, which beats hand-drawing one on a canvas.
-    style.configure(
-        "Segment.Toolbutton",
-        background=c["bg_input"], foreground=c["text_muted"],
-        font=("Segoe UI", 10), padding=(14, 7), borderwidth=0, relief="flat",
-        focuscolor=c["bg_input"],
-    )
-    style.map(
-        "Segment.Toolbutton",
-        background=[("selected", c["accent"]), ("active", c["border"])],
-        foreground=[("selected", c["on_accent"]), ("active", c["text"])],
-    )
-
-    # Toolbar on/off pill. A plain Checkbutton would do, but clam draws its
-    # indicator as a cross, so a ticked step reads as switched off.
-    # An unselected pill keeps a filled background: on the toolbar's near-black
-    # it would otherwise read as a plain label rather than something clickable.
-    style.configure(
-        "Step.Toolbutton",
-        background=c["bg_input"], foreground=c["text_muted"],
-        font=("Segoe UI", 9), padding=(12, 6), borderwidth=1, relief="flat",
-        focuscolor=c["bg_input"], bordercolor=c["border"],
-        lightcolor=c["bg_input"], darkcolor=c["bg_input"],
-    )
-    style.map(
-        "Step.Toolbutton",
-        background=[("selected", c["accent"]), ("active", c["border"]), ("disabled", c["bg_toolbar"])],
-        foreground=[("selected", c["on_accent"]), ("active", c["text"]), ("disabled", c["border"])],
-        bordercolor=[("selected", c["accent"]), ("disabled", c["bg_toolbar"])],
-        lightcolor=[("selected", c["accent"])],
-        darkcolor=[("selected", c["accent"])],
-    )
+    for name, background in (("TCheckbutton", c["bg_surface"]),
+                             ("OnRaised.TCheckbutton", c["bg_surface_raised"]),
+                             ("OnField.TCheckbutton", c["bg_field"])):
+        style.configure(name, background=background, foreground=c["text_primary"],
+                        font=FONTS["body"], **indicator)
+        style.map(
+            name,
+            background=[("active", background)],
+            foreground=[("active", c["accent"]), ("disabled", c["text_disabled"])],
+            **indicator_map,
+        )
 
     # --- combobox -----------------------------------------------------------
     style.configure(
         "TCombobox",
-        fieldbackground=c["bg_input"], background=c["bg_input"], foreground=c["text"],
-        arrowcolor=c["text_muted"], bordercolor=c["border"], lightcolor=c["bg_input"],
-        darkcolor=c["bg_input"], insertcolor=c["text"], borderwidth=1, padding=(8, 6),
+        fieldbackground=c["bg_field"], background=c["bg_field"], foreground=c["text_primary"],
+        arrowcolor=c["text_secondary"], bordercolor=c["border_subtle"], lightcolor=c["bg_field"],
+        darkcolor=c["bg_field"], insertcolor=c["text_primary"], borderwidth=1, padding=(8, 8),
     )
     style.map(
         "TCombobox",
-        fieldbackground=[("readonly", c["bg_input"]), ("disabled", c["bg_dark"])],
-        foreground=[("readonly", c["text"]), ("disabled", c["text_muted"])],
-        background=[("readonly", c["bg_input"]), ("active", c["bg_input"])],
+        fieldbackground=[("readonly", c["bg_field"]), ("disabled", c["bg_app"])],
+        foreground=[("readonly", c["text_primary"]), ("disabled", c["text_disabled"])],
+        background=[("readonly", c["bg_field"]), ("active", c["bg_field"])],
         arrowcolor=[("active", c["accent"])],
-        bordercolor=[("focus", c["accent"])],
-        selectbackground=[("readonly", c["bg_input"])],
-        selectforeground=[("readonly", c["text"])],
+        bordercolor=[("focus", c["border_focus"])],
+        selectbackground=[("readonly", c["bg_field"])],
+        selectforeground=[("readonly", c["text_primary"])],
     )
-    # The dropdown list is a plain Tk Listbox that ttk does not reach, so it
-    # stays white unless set through the option database.
-    root.option_add("*TCombobox*Listbox.background", c["bg_input"])
-    root.option_add("*TCombobox*Listbox.foreground", c["text"])
+    # The dropdown list is a plain Tk Listbox that ttk does not reach, so it stays
+    # white unless set through the option database.
+    root.option_add("*TCombobox*Listbox.background", c["bg_surface_raised"])
+    root.option_add("*TCombobox*Listbox.foreground", c["text_primary"])
     root.option_add("*TCombobox*Listbox.selectBackground", c["accent"])
-    root.option_add("*TCombobox*Listbox.selectForeground", c["on_accent"])
+    root.option_add("*TCombobox*Listbox.selectForeground", c["accent_ink"])
     root.option_add("*TCombobox*Listbox.font", "{Segoe UI} 10")
     root.option_add("*TCombobox*Listbox.borderWidth", 0)
-
-    # --- menubutton used as a multi-select field ----------------------------
-    # Styled to read as a Combobox, since that is what it stands in for.
-    style.configure(
-        "Field.TMenubutton",
-        background=c["bg_input"], foreground=c["text"],
-        bordercolor=c["border"], lightcolor=c["bg_input"], darkcolor=c["bg_input"],
-        arrowcolor=c["text_muted"], font=("Segoe UI", 10),
-        padding=(8, 6), borderwidth=1, relief="flat", anchor="w",
-    )
-    style.map(
-        "Field.TMenubutton",
-        background=[("active", c["bg_input"]), ("disabled", c["bg_dark"])],
-        foreground=[("disabled", c["text_muted"])],
-        arrowcolor=[("active", c["accent"])],
-        bordercolor=[("focus", c["accent"])],
-    )
+    # Tk menus (the account menu, any context menu) are native-light by default.
+    root.option_add("*Menu.background", c["bg_surface_raised"])
+    root.option_add("*Menu.foreground", c["text_primary"])
+    root.option_add("*Menu.activeBackground", c["bg_hover"])
+    root.option_add("*Menu.activeForeground", c["text_primary"])
+    root.option_add("*Menu.selectColor", c["accent"])
+    root.option_add("*Menu.borderWidth", 0)
+    root.option_add("*Menu.activeBorderWidth", 0)
+    root.option_add("*Menu.font", "{Segoe UI} 10")
 
     # --- entry --------------------------------------------------------------
     style.configure(
         "TEntry",
-        fieldbackground=c["bg_input"], foreground=c["text"], insertcolor=c["text"],
-        bordercolor=c["border"], lightcolor=c["bg_input"], darkcolor=c["bg_input"],
-        borderwidth=1, padding=(8, 6),
+        fieldbackground=c["bg_field"], foreground=c["text_primary"], insertcolor=c["text_primary"],
+        bordercolor=c["border_subtle"], lightcolor=c["bg_field"], darkcolor=c["bg_field"],
+        borderwidth=1, padding=(8, 8),
     )
-    style.map("TEntry", bordercolor=[("focus", c["accent"])])
-
-    # --- treeview -----------------------------------------------------------
-    style.configure(
-        "Custom.Treeview",
-        background=c["bg_input"], foreground=c["text"], fieldbackground=c["bg_input"],
-        borderwidth=0, relief="flat", font=("Segoe UI", 10), rowheight=26,
-    )
-    style.configure(
-        "Custom.Treeview.Heading",
-        background=c["bg_card"], foreground=c["text_muted"],
-        font=("Segoe UI Semibold", 9), relief="flat", borderwidth=0, padding=(8, 6),
-    )
-    style.map(
-        "Custom.Treeview",
-        background=[("selected", c["accent"])],
-        foreground=[("selected", c["on_accent"])],
-    )
-    style.map(
-        "Custom.Treeview.Heading",
-        background=[("active", c["border"])],
-        foreground=[("active", c["text"])],
-    )
-    # clam draws a raised border around the whole widget by default.
-    style.layout("Custom.Treeview", [("Custom.Treeview.treearea", {"sticky": "nswe"})])
+    style.map("TEntry", bordercolor=[("focus", c["border_focus"])])
 
     # --- scrollbars ---------------------------------------------------------
     for orient in ("Vertical", "Horizontal"):
         style.configure(
             f"{orient}.TScrollbar",
-            background=c["bg_input"], troughcolor=c["bg_dark"], bordercolor=c["bg_dark"],
-            arrowcolor=c["text_muted"], lightcolor=c["bg_input"], darkcolor=c["bg_input"],
-            borderwidth=0, arrowsize=12,
+            background=c["bg_surface_raised"], troughcolor=c["bg_app"], bordercolor=c["bg_app"],
+            arrowcolor=c["text_secondary"], lightcolor=c["bg_surface_raised"],
+            darkcolor=c["bg_surface_raised"], borderwidth=0, arrowsize=12,
         )
         style.map(
             f"{orient}.TScrollbar",
-            background=[("active", c["border"]), ("disabled", c["bg_dark"])],
+            background=[("active", c["bg_hover"]), ("disabled", c["bg_app"])],
             arrowcolor=[("active", c["accent"])],
         )
 
     # --- misc ---------------------------------------------------------------
-    style.configure("TSeparator", background=c["border"])
-    style.configure("TProgressbar", background=c["accent"], troughcolor=c["bg_input"], borderwidth=0, thickness=3)
-    style.configure("TPanedwindow", background=c["bg_dark"])
+    style.configure("TSeparator", background=c["border_subtle"])
+    style.configure("TProgressbar", background=c["accent"], troughcolor=c["bg_surface_raised"],
+                    borderwidth=0, thickness=4)
+    style.configure("Thin.TProgressbar", background=c["accent"], troughcolor=c["bg_surface_raised"],
+                    borderwidth=0, thickness=4)
 
 
 def bind_scroll(canvas: tk.Canvas, *widgets: tk.Misc) -> None:
     """Route the mouse wheel to `canvas` only while the pointer is over it.
 
-    A bare ``bind_all`` would scroll whichever canvas registered last no matter
-    which window the pointer is in.
+    A bare ``bind_all`` would scroll whichever canvas registered last no matter which
+    window the pointer is in.
     """
     def on_wheel(event):
         canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -279,210 +296,11 @@ def bind_scroll(canvas: tk.Canvas, *widgets: tk.Misc) -> None:
 def fit_canvas_width(canvas: tk.Canvas, window_id: int) -> None:
     """Keep a scrolled inner frame exactly as wide as its canvas.
 
-    Without this the inner frame keeps its requested width, so content wider
-    than the window is silently clipped -- there is no horizontal scrollbar to
-    reach it.
+    Without this the inner frame keeps its requested width, so content wider than the
+    window is silently clipped -- there is no horizontal scrollbar to reach it.
     """
     canvas.bind(
         "<Configure>",
         lambda e: canvas.itemconfigure(window_id, width=e.width),
         add="+",
     )
-
-
-class WidgetFactory:
-    """Builds the styled widgets the screens are made of.
-
-    Usage:
-        from gui.theme import widgets
-        card, inner = widgets.create_card(parent, "Your projects")
-    """
-
-    def create_card(self, parent: tk.Misc, title: str | None = None) -> tuple[ttk.Frame, ttk.Frame]:
-        """Card container; add content to the returned inner frame."""
-        card = ttk.Frame(parent, style="Card.TFrame")
-        card.pack(fill="x", pady=(0, 12))
-
-        inner = ttk.Frame(card, style="Card.TFrame")
-        inner.pack(fill="x", padx=14, pady=12)
-
-        if title:
-            ttk.Label(inner, text=title, style="Header.TLabel").pack(anchor="w", pady=(0, 8))
-
-        return card, inner
-
-    def create_button(
-        self,
-        parent: tk.Misc,
-        text: str,
-        command: Callable[[], None],
-        style: str = "default",
-        width: int | None = None,
-    ) -> tk.Button:
-        """Button in one of three flavours: "default", "accent" or "danger"."""
-        styles = {
-            "default": {
-                "bg": theme["bg_input"],
-                "fg": theme["text"],
-                "activebackground": theme["border"],
-                "activeforeground": theme["text"],
-            },
-            "accent": {
-                "bg": theme["accent"],
-                "fg": theme["on_accent"],
-                "activebackground": theme["accent_hover"],
-                "activeforeground": theme["on_accent"],
-            },
-            "danger": {
-                "bg": theme["error"],
-                "fg": theme["on_accent"],
-                "activebackground": theme["error"],
-                "activeforeground": theme["on_accent"],
-            },
-        }
-
-        btn = tk.Button(
-            parent,
-            text=text,
-            font=("Segoe UI", 9),
-            relief="flat",
-            padx=12,
-            pady=6,
-            command=command,
-            **styles.get(style, styles["default"]),
-        )
-
-        if width:
-            btn.configure(width=width)
-
-        return btn
-
-    def create_text_field(
-        self,
-        parent: tk.Misc,
-        label: str,
-        variable: tk.StringVar,
-        hint: str = "",
-        show: str | None = None,
-    ) -> tk.Entry:
-        """Labelled text input. `show` masks the entry, e.g. the API key."""
-        frame = ttk.Frame(parent, style="TFrame")
-        frame.pack(fill="x", pady=(0, 12))
-
-        ttk.Label(
-            frame,
-            text=label,
-            font=("Segoe UI Semibold", 10),
-            background=theme["bg_dark"],
-            foreground=theme["text"],
-        ).pack(anchor="w")
-
-        if hint:
-            ttk.Label(
-                frame,
-                text=hint,
-                font=("Segoe UI", 9),
-                background=theme["bg_dark"],
-                foreground=theme["text_muted"],
-            ).pack(anchor="w")
-
-        entry_frame = tk.Frame(
-            frame,
-            bg=theme["bg_input"],
-            highlightbackground=theme["border"],
-            highlightthickness=1,
-            highlightcolor=theme["accent"],
-        )
-        entry_frame.pack(fill="x", pady=(4, 0))
-
-        entry = tk.Entry(
-            entry_frame,
-            textvariable=variable,
-            font=("Consolas", 10),
-            bg=theme["bg_input"],
-            fg=theme["text"],
-            insertbackground=theme["text"],
-            relief="flat",
-            show=show or "",
-        )
-        entry.pack(fill="x", padx=8, pady=8)
-
-        return entry
-
-    def create_segmented(
-        self,
-        parent: tk.Misc,
-        label: str,
-        options: list[tuple[str, str]],
-        variable: tk.StringVar,
-        hint: str = "",
-    ) -> ttk.Frame:
-        """Labelled row of mutually exclusive buttons.
-
-        Replaces a card of radio buttons for a two- or three-way choice: same
-        information, a fraction of the vertical space.
-        """
-        row = ttk.Frame(parent, style="Card.TFrame")
-        row.pack(fill="x", pady=(0, 8))
-
-        ttk.Label(row, text=label, style="Card.TLabel", width=12).pack(side="left")
-
-        group = tk.Frame(row, bg=theme["border"])
-        group.pack(side="left")
-
-        for text, value in options:
-            ttk.Radiobutton(
-                group,
-                text=text,
-                variable=variable,
-                value=value,
-                style="Segment.Toolbutton",
-            ).pack(side="left", padx=1, pady=1)
-
-        if hint:
-            ttk.Label(row, text=hint, style="Muted.TLabel").pack(side="left", padx=(10, 0))
-
-        return row
-
-    def create_dropdown(
-        self,
-        parent: tk.Misc,
-        label: str,
-        variable: tk.StringVar,
-        options: list[str],
-        hint: str = "",
-    ) -> ttk.Combobox:
-        """Labelled read-only dropdown field."""
-        frame = ttk.Frame(parent, style="TFrame")
-        frame.pack(fill="x", pady=(0, 12))
-
-        ttk.Label(
-            frame,
-            text=label,
-            font=("Segoe UI Semibold", 10),
-            background=theme["bg_dark"],
-            foreground=theme["text"],
-        ).pack(anchor="w")
-
-        if hint:
-            ttk.Label(
-                frame,
-                text=hint,
-                font=("Segoe UI", 9),
-                background=theme["bg_dark"],
-                foreground=theme["text_muted"],
-            ).pack(anchor="w")
-
-        combo = ttk.Combobox(
-            frame,
-            textvariable=variable,
-            values=options,
-            state="readonly",
-            font=("Segoe UI", 10),
-        )
-        combo.pack(fill="x", pady=(4, 0))
-
-        return combo
-
-
-widgets = WidgetFactory()
