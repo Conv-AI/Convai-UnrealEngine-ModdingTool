@@ -119,8 +119,11 @@ class SettingsDialog:
         inner = self._section(parent, "Unreal Engine",
                               "Used when creating, updating and migrating projects.")
         self._engine_row(inner, "current")
-        self._divider(inner)
-        self._engine_row(inner, "target")
+        # Migration only needs a second installation when it targets a different version;
+        # when the two match, a second row is the same control twice.
+        if self.app.engine_version("target") != self.app.engine_version("current"):
+            self._divider(inner)
+            self._engine_row(inner, "target")
 
     def _build_packaging(self, parent: tk.Frame) -> None:
         version = config.get_current_unreal_engine_version()

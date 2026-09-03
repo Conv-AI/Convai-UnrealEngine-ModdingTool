@@ -115,7 +115,6 @@ class App:
     def show_shelf(self, select_path: Optional[str] = None) -> None:
         from gui.screens.shelf import ShelfScreen
 
-        self.refresh_engine_chip()
         self.show(ShelfScreen(self, select_path), "Projects")
 
     def show_new_project(self, state: Optional[dict] = None) -> None:
@@ -254,7 +253,6 @@ class App:
             self.input_manager.target_unreal_engine_path = path
         else:
             self.input_manager.unreal_engine_path = path
-        self.refresh_engine_chip()
         if self.screen is not None and hasattr(self.screen, "on_engine_changed"):
             self.screen.on_engine_changed()
 
@@ -278,11 +276,6 @@ class App:
                 parent=parent or self.root)
             return None
         return chosen
-
-    def refresh_engine_chip(self) -> None:
-        version = config.get_current_unreal_engine_version()
-        self.shell.set_engine(version, ok=bool(self.engine_path("current")))
-
 
 def run_gui(tool_version: str, input_manager: InputManager,
             flows: dict[str, Callable[[], Optional[str]]]) -> None:

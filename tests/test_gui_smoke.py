@@ -421,6 +421,87 @@ def wait_until(root, predicate, timeout_ms: int = 3000) -> bool:
     return bool(done)
 
 
+def test_settings_engine_rows(root, app):
+    """T-GUI-16: one engine row per distinct version.
+
+    Current and target are the same version in the shipped config, and two rows reading
+    "Unreal Engine 5.8" are the same control twice.
+    """
+    from gui.screens.settings import SettingsDialog
+
+    def rows_for(current, target):
+        original = config._remote_config
+        config._remote_config = original.__class__(
+            config=original.config,
+            version_data={'current-ue-version': current, 'target-ue-version': target},
+            uploader_config=original.uploader_config)
+        dialog = SettingsDialog(app)
+        try:
+            dialog.open()
+            root.update()
+            captions = [text for text in visible_texts(dialog.window) if text.startswith('Unreal Engine ')]
+            return captions
+        finally:
+            dialog.close()
+            config._remote_config = original
+            root.update()
+
+    same = rows_for('5.8', '5.8')
+    assert len(same) == 1, same
+    differing = rows_for('5.6', '5.8')
+    assert len(differing) == 2 and set(differing) == {'Unreal Engine 5.6', 'Unreal Engine 5.8'}, differing
+
+
+def test_account_menu(root, app):
+    """T-GUI-17: the app-bar account control opens a menu that can actually sign out.
+
+    The menu is an override-redirect window, which no window manager raises or focuses
+    for us, so this checks it is still there after the event loop has run rather than
+    just that it was created.
+    """
+    app.account.adopt('key', 'Alex Chen', 'alex@example.com')
+    app.refresh_account()
+    app.show_shelf()
+    settle(root, app)
+
+    root.deiconify()
+    try:
+        app.open_account()
+        root.update()
+        menus = [child for child in root.winfo_children()
+                 if isinstance(child, tk.Toplevel) and child.winfo_exists()]
+        assert len(menus) == 1, menus
+        texts = visible_texts(menus[0])
+        assert {'Open Convai dashboard', 'Switch account', 'Log out'} <= texts, texts
+        assert 'Alex Chen' in texts and 'alex@example.com' in texts, texts
+
+        log_out = [widget for widget in menus[0].winfo_children()[0].winfo_children()[-1].winfo_children()
+                   if str(widget['text']) == 'Log out']
+        assert log_out, 'no Log out item'
+        log_out[0].invoke()
+        settle(root, app)
+    finally:
+        root.withdraw()
+
+    assert not app.account.is_signed_in, 'Log out left the session in place'
+    assert 'Sign in' in app.shell.account_btn['text'], app.shell.account_btn['text']
+    assert not [child for child in root.winfo_children()
+                if isinstance(child, tk.Toplevel) and child.winfo_exists()], 'the menu outlived its choice'
+
+
+def test_app_bar_has_no_engine_state(root, app):
+    """T-GUI-18: the app bar does not report the engine.
+
+    Settings owns it. A chip reading "UE 5.8 ready" off a cached path was a second,
+    quieter source of truth that could disagree with the dialog.
+    """
+    app.show_shelf()
+    settle(root, app)
+    captions = ' '.join(visible_texts(app.shell.bar))
+    assert 'ready' not in captions.lower(), captions
+    assert 'UE ' not in captions, captions
+
+
 def test_engine_choice_survives_a_run(root, app, tmp):
     """T-GUI-15: a chosen engine outlives InputManager.reset(), and a dead path is not
     reported as ready.
@@ -586,6 +667,9 @@ try:
             test_blocked_screens(root, app)
             test_sign_in_modal(root, app)
             test_account_states(root, app)
+            test_settings_engine_rows(root, app)
+            test_account_menu(root, app)
+            test_app_bar_has_no_engine_state(root, app)
             test_engine_choice_survives_a_run(root, app, tmp)
             test_no_horizontal_overflow(root, app)
         finally:

@@ -260,7 +260,6 @@ class ReviewScreen:
         else:
             self.engine = chosen
             self.app.input_manager.unreal_engine_path = chosen
-            self.app.refresh_engine_chip()
         self._render()
 
     def _lines(self, parent: tk.Frame, texts: list[str], numbered: bool = False) -> None:

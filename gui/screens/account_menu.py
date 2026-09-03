@@ -53,16 +53,24 @@ class AccountMenu:
         win.bind("<Up>", lambda event: self._move(-1), add="+")
         win.bind("<Destroy>", self._on_destroy, add="+")
         # A Toplevel is in its descendants' bindtags, so one binding covers every item.
-        win.bind("<FocusOut>", self._on_focus_out, add="+")
+        win.bind("<Button-1>", self._on_click, add="+")
 
         self._place(anchor_widget)
-        win.focus_force()
+        # An override-redirect window is not managed, so nothing raises it for us, and
+        # whether it can hold keyboard focus is up to the window manager. The grab is
+        # what makes the menu dismissable: with it, a click anywhere else in the app is
+        # delivered here instead of vanishing, and closing on focus loss -- which Windows
+        # reports inconsistently for an unmanaged window -- is not needed.
+        win.lift()
+        win.wm_attributes("-topmost", True)
+        win.grab_set()
         if self.items:
             self.items[0].focus_set()
 
     def close(self) -> None:
         win, self.win = self.win, None
         if win is not None and win.winfo_exists():
+            win.grab_release()
             win.destroy()
 
     def _on_destroy(self, event) -> None:
@@ -70,19 +78,17 @@ class AccountMenu:
         if event.widget is self.win:
             self.win = None
 
-    def _on_focus_out(self, _event=None) -> None:
-        # The new focus owner is not known until the event has been processed, and
-        # moving between the menu's own items is not a reason to close.
-        self.app.root.after_idle(self._close_if_focus_left)
-
-    def _close_if_focus_left(self) -> None:
+    def _on_click(self, event) -> str | None:
+        """Close on a click outside the menu; the grab routes those here."""
         win = self.win
         if win is None or not win.winfo_exists():
-            return
-        focused = win.focus_get()
-        if focused is not None and focused.winfo_toplevel() is win:
-            return
-        self.close()
+            return None
+        inside = (0 <= event.x_root - win.winfo_rootx() < win.winfo_width()
+                  and 0 <= event.y_root - win.winfo_rooty() < win.winfo_height())
+        if not inside:
+            self.close()
+            return "break"
+        return None
 
     # --- contents -----------------------------------------------------------
 

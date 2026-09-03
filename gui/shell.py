@@ -1,8 +1,8 @@
 """The window chrome: app bar, scrolling page host and status bar.
 
-The chrome is built once and outlives every screen, so the user always knows where
-they are, whether the engine is ready and who they are signed in as. Screens only ever
-fill ``Shell.page``.
+The chrome is built once and outlives every screen, so the user always knows where they
+are and who they are signed in as. The engine belongs to Settings, not here: a second,
+quieter reading of it in the app bar only invites the two to disagree.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Callable, Optional
 
-from gui.components import Tooltip, button, pill, scroll_host
+from gui.components import Tooltip, button, scroll_host
 from gui.theme import FONTS, NARROW_WIDTH, SPACE, theme
 
 
@@ -18,8 +18,7 @@ class Shell:
     """Window chrome around a single swappable page."""
 
     def __init__(self, root: tk.Misc, tool_version: str, on_home: Callable[[], None],
-                 on_settings: Callable[[], None], on_account: Callable[[], None],
-                 on_engine: Optional[Callable[[], None]] = None):
+                 on_settings: Callable[[], None], on_account: Callable[[], None]):
         self.root = root
         self.on_home = on_home
         self.navigation_enabled = True
@@ -77,12 +76,6 @@ class Shell:
         self.account_btn.bind("<Return>", lambda event: self.account_btn.invoke(), add="+")
         self.account_btn.pack(side="right", padx=(0, 8), pady=14)
 
-        self.engine_chip = tk.Frame(right, background=theme["bg_surface"])
-        self.engine_chip.pack(side="right", padx=(0, 12))
-        self._engine_pill: Optional[tk.Frame] = None
-        self._on_engine = on_engine or on_settings
-        self.set_engine("", ok=False)
-
         # --- page host ------------------------------------------------------
         self.canvas, self.page = scroll_host(self.container)
         self.canvas.container.pack(fill="both", expand=True)
@@ -117,19 +110,6 @@ class Shell:
 
     def set_breadcrumb(self, text: str) -> None:
         self.breadcrumb.configure(text=f"/ {text}" if text else "")
-
-    def set_engine(self, version: str, ok: bool) -> None:
-        """The engine chip: `UE 5.4 ready`, or the same version needing attention."""
-        if self._engine_pill is not None:
-            self._engine_pill.destroy()
-        text = f"UE {version} ready" if ok else (
-            f"UE {version} needs attention" if version else "Engine not configured")
-        self._engine_pill = pill(self.engine_chip, text, tone="ok" if ok else "warn")
-        self._engine_pill.pack()
-        self._engine_pill.configure(cursor="hand2")
-        for widget in (self._engine_pill, *self._engine_pill.winfo_children()):
-            widget.bind("<Button-1>", lambda event: self._on_engine(), add="+")
-        Tooltip(self._engine_pill, "Open Settings to change the Unreal Engine installation")
 
     def set_account(self, name: Optional[str], email: str = "") -> None:
         """Signed out shows `Sign in`; signed in shows an initial and the first name."""
