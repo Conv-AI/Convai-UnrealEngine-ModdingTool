@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import threading
 import time
 from typing import Optional
 
@@ -10,6 +11,10 @@ import requests
 from core.config_manager import config
 from core.exceptions import DownloadError
 from core.file_utility_manager import FileUtilityManager
+
+# The GUI can start a toolchain install from Settings while a build worker is already
+# inside this code. Both would download and unpack into the same directory.
+_TOOLCHAIN_LOCK = threading.Lock()
 from core.github_manager import GitHubManager
 from core.plugin_manager import PluginManager
 from core.logger import logger
@@ -514,6 +519,13 @@ class DownloadManager:
         if not force and not config.linux_packaging_enabled():
             logger.info("Linux packaging is disabled; skipping cross-compilation toolchain")
             return True
+
+        with _TOOLCHAIN_LOCK:
+            return DownloadManager._ensure_toolchain_locked(ue_version)
+
+    @staticmethod
+    def _ensure_toolchain_locked(ue_version: str) -> bool:
+        """The body of ensure_toolchain_for_version, one caller at a time."""
 
         toolchain_version = config.get_cross_compilation_toolchain(ue_version)
         logger.info(f"🔍 Ensuring toolchain {toolchain_version} for UE {ue_version}")
