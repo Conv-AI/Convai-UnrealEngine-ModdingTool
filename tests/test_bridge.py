@@ -515,4 +515,5 @@ finally:
     UnrealEngineManager.is_valid_current_engine_path = original_valid
     UnrealEngineManager.is_valid_target_engine_path = original_target_valid
 
+config._remote_config = None
 print('ok')

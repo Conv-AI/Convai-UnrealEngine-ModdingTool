@@ -30,6 +30,7 @@ from core.input_manager import InputManager
 from core.logger import logger
 from core.unreal_engine_manager import UnrealEngineManager
 
+PUMP_DRAIN_SECONDS = 30
 INSTALLING = "Installing, this can take several minutes…"
 NO_DIALOG = "This build cannot open that dialog."
 
@@ -482,7 +483,9 @@ class Dispatcher:
                 logger.logger.removeHandler(handler)
                 finished.set()
 
-            pumping.join()
+            # Bounded: every event is a round trip into the UI thread, and a native
+            # dialog sitting open there would otherwise hold the run slot indefinitely.
+            pumping.join(timeout=PUMP_DRAIN_SECONDS)
             if ok:
                 self._emit(event("steps", {"runId": run_id,
                                            "steps": steps_view(titles, len(titles), finished=True)}))
