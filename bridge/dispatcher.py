@@ -73,6 +73,7 @@ class Dispatcher:
         self.choose_folder = choose_folder
         self.save_file = save_file
         self.on_quit = on_quit
+        self._login = None
 
         self.account = AccountSession()
         # Engine folders the user picked. They live here, not on the InputManager,
@@ -222,12 +223,25 @@ class Dispatcher:
 
     def _sign_in_google(self, params: dict) -> dict:
         # The login blocks until the browser comes back or the wait times out, so the
-        # host has to call `handle` off whatever thread paints the UI.
+        # host has to call `handle` off whatever thread paints the UI. It is held here
+        # so closing the window can end it: the thread waiting on it may be one the host
+        # cannot abandon.
+        login = BrowserLogin()
+        self._login = login
         try:
-            api_key, username, email = BrowserLogin().run()
+            api_key, username, email = login.run()
         except AuthError as exc:
             raise BridgeError(_auth_code(exc), str(exc))
+        finally:
+            if self._login is login:
+                self._login = None
         return self._adopted(api_key, username, email)
+
+    def cancel_sign_in(self) -> None:
+        """Abandon a browser sign-in that is still waiting. Safe to call at any time."""
+        login = self._login
+        if login is not None:
+            login.cancel()
 
     def _sign_in_key(self, params: dict) -> dict:
         key = str(params.get("key") or "").strip()
@@ -479,8 +493,19 @@ class Dispatcher:
                     self._run_id = None
 
         pumping = threading.Thread(target=pump, daemon=True)
-        pumping.start()
-        threading.Thread(target=work, daemon=True).start()
+        try:
+            pumping.start()
+            threading.Thread(target=work, daemon=True).start()
+        except BaseException:
+            # The slot and the log handler are released by the worker. If the worker
+            # never starts, nothing else ever frees them and every later run is refused
+            # as busy on a machine that is doing nothing.
+            finished.set()
+            logger.logger.removeHandler(handler)
+            with self._lock:
+                if self._run_id == run_id:
+                    self._run_id = None
+            raise
         return {"runId": run_id}
 
     # --- files and folders --------------------------------------------------
@@ -520,9 +545,9 @@ class Dispatcher:
                 raise BridgeError("busy", "The toolchain is already being installed.")
             self._installing = True
 
-        version = config.get_current_unreal_engine_version()
-        self._emit(event("toolchain", {"state": "installing", "message": INSTALLING}))
         try:
+            version = config.get_current_unreal_engine_version()
+            self._emit(event("toolchain", {"state": "installing", "message": INSTALLING}))
             from core.download_utils import DownloadManager
 
             installed = DownloadManager.ensure_toolchain_for_version(version, force=True)

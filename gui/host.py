@@ -186,6 +186,7 @@ class Host:
         """`app.quit` from the page. Destroying the window ends `webview.start`."""
         self._runs.clear()
         self._installing = False
+        self._cancel_sign_in()
         try:
             self.window.destroy()
         except Exception:
@@ -199,8 +200,19 @@ class Host:
         writes to disk, so it counts too -- the `toolchain` events bracket it.
         """
         if not self._runs and not self._installing:
+            self._cancel_sign_in()
             return True
-        return self.window.create_confirmation_dialog(TITLE, CLOSE_WARNING)
+        if not self.window.create_confirmation_dialog(TITLE, CLOSE_WARNING):
+            return False
+        self._cancel_sign_in()
+        return True
+
+    def _cancel_sign_in(self) -> None:
+        """A sign-in still waiting on the browser holds a thread pywebview will not
+        abandon, so the window would close and the process would stay."""
+        cancel = getattr(self.dispatcher, "cancel_sign_in", None)
+        if cancel is not None:
+            cancel()
 
 
 def run_gui(tool_version: str, input_manager: InputManager,

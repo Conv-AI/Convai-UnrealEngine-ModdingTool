@@ -36,11 +36,12 @@ MIGRATE_STEPS = [
     ("Building the copy", "building migrated project"),
 ]
 CREATE_STEPS = [
-    "Validating Unreal Engine",
-    "Setting up project",
-    "Downloading Convai dependencies",
-    "Configuring assets",
-    "Building project",
+    ("Setting up the project", "setting up project structure"),
+    ("Creating the content plugin", "creating content plugin"),
+    ("Downloading Convai dependencies", "downloading convai dependencies"),
+    ("Enabling required plugins", "enabling required plugins"),
+    ("Configuring project assets", "configuring project assets"),
+    ("Building project", "building project"),
 ]
 
 
