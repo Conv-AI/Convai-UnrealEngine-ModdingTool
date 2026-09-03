@@ -12,8 +12,18 @@ class ConvaiLogger:
         for handler in self.logger.handlers[:]:
             self.logger.removeHandler(handler)
         
-        # Create console handler with custom formatting
-        console_handler = logging.StreamHandler(sys.stdout)
+        # Every message here carries an emoji prefix, and a Windows console is cp1252:
+        # unencodable characters make logging raise on each line instead of printing it.
+        # The exe redirects stdout to a pipe, where the same applies.
+        stream = sys.stdout
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            # A stream that cannot be reconfigured (already wrapped, or detached) still
+            # has to be logged to; the replacement below keeps it printable.
+            pass
+
+        console_handler = logging.StreamHandler(stream)
         console_handler.setLevel(level)
         
         # Custom formatter without timestamps for user-friendly output
