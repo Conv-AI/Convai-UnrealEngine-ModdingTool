@@ -13,45 +13,84 @@ class RemoteConfig:
     """Immutable configuration loaded from remote source."""
     config: Dict[str, Any]
     version_data: Dict[str, Any]
+    uploader_config: Dict[str, Any]
+
+
+# Used when resources/asset_uploader_config.json cannot be fetched. The exe bundles
+# no data files, so the fallback has to live in code.
+DEFAULT_ASSET_UPLOADER_CONFIG = {
+    "unreal-engine": {
+        "windows": {
+            "should-package": True,
+            "configuration": "Shipping"
+        },
+        "linux": {
+            "should-package": False,
+            "configuration": "Shipping"
+        }
+    },
+    "raw-project-upload": True
+}
 
 
 class ConfigManager:
     """Manages configuration settings for the Convai Modding Tool."""
-    
+
     _instance: Optional['ConfigManager'] = None
-    
+
     # GitHub configuration for fetching config
     GITHUB_REPO = "Conv-AI/Convai-UnrealEngine-ModdingTool"
     GITHUB_BRANCH = "main"
     CONFIG_FILE_PATH = "resources/modding_tool_config.json"
     VERSION_FILE_PATH = "Version.json"
-    
+    UPLOADER_CONFIG_FILE_PATH = "resources/asset_uploader_config.json"
+
     def __new__(cls) -> 'ConfigManager':
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self, max_attempts: int = 5, timeout: int = 30):
         if self._initialized:
             return
         self._max_attempts = max_attempts
         self._timeout = timeout
-        self._remote_config = self._load_remote_config()
+        # Loaded lazily so importing core.* never blocks on the network; seed this
+        # directly with a RemoteConfig to run offline.
+        self._remote_config: Optional[RemoteConfig] = None
         self._initialized = True
-    
-    def _load_remote_config(self) -> RemoteConfig:
-        """Load configuration with retry logic."""
+
+    @property
+    def remote_config(self) -> RemoteConfig:
+        self.load()
+        return self._remote_config
+
+    def load(self) -> None:
+        """Fetch the remote configuration once. Safe to call repeatedly."""
+        if self._remote_config is not None:
+            return
+
         config_data = self._fetch_json(self.CONFIG_FILE_PATH)
         if not config_data:
             raise ConfigurationError(
                 f"Failed to load config after {self._max_attempts} attempts. "
                 "Please ensure GitHub is accessible."
             )
-        
+
         version_data = self._fetch_json(self.VERSION_FILE_PATH) or {}
-        return RemoteConfig(config=config_data, version_data=version_data)
-    
+
+        uploader = self._fetch_json(self.UPLOADER_CONFIG_FILE_PATH)
+        if uploader is None:
+            logger.warning("Could not fetch asset uploader config, using built-in default")
+            uploader = DEFAULT_ASSET_UPLOADER_CONFIG
+
+        self._remote_config = RemoteConfig(
+            config=config_data,
+            version_data=version_data,
+            uploader_config=uploader
+        )
+
     def _fetch_json(self, file_path: str) -> Optional[Dict[str, Any]]:
         """Fetch JSON from GitHub with retry logic and exponential backoff."""
         url = f"https://raw.githubusercontent.com/{self.GITHUB_REPO}/{self.GITHUB_BRANCH}/{file_path}"
@@ -73,7 +112,7 @@ class ConfigManager:
         Example: get('unreal_engine.current_version')
         """
         keys = key_path.split('.')
-        value = self._remote_config.config
+        value = self.remote_config.config
         
         for key in keys:
             if not isinstance(value, dict) or key not in value:
@@ -84,7 +123,7 @@ class ConfigManager:
     
     def get_current_unreal_engine_version(self) -> str:
         """Get current Unreal Engine version from cached version data."""
-        version = self._remote_config.version_data.get('current-ue-version')
+        version = self.remote_config.version_data.get('current-ue-version')
         if version:
             return version
         logger.warning("Version data is not valid, returning 5.5 as UE version")
@@ -92,7 +131,7 @@ class ConfigManager:
     
     def get_target_unreal_engine_version(self) -> str:
         """Get target Unreal Engine version from cached version data."""
-        version = self._remote_config.version_data.get('target-ue-version')
+        version = self.remote_config.version_data.get('target-ue-version')
         if version:
             return version
         logger.warning("Version data is not valid, returning 5.8 as target UE version")
@@ -139,7 +178,24 @@ class ConfigManager:
     def get_cross_compilation_env_var(self) -> str:
         """Get cross-compilation environment variable name."""
         return self.get('cross_compilation.environment_variable', 'LINUX_MULTIARCH_ROOT')
-    
+
+    @staticmethod
+    def _linux_enabled(uploader_cfg: Optional[Dict[str, Any]]) -> bool:
+        """Read unreal-engine.linux.should-package out of an uploader config."""
+        if not isinstance(uploader_cfg, dict):
+            return False
+        engine = uploader_cfg.get('unreal-engine')
+        if not isinstance(engine, dict):
+            return False
+        linux = engine.get('linux')
+        if not isinstance(linux, dict):
+            return False
+        return bool(linux.get('should-package', False))
+
+    def linux_packaging_enabled(self) -> bool:
+        """Whether the AssetUploader will package for Linux, gating all toolchain work."""
+        return self._linux_enabled(self.remote_config.uploader_config)
+
     def get_google_drive_id(self, resource_name: str) -> str:
         """Get Google Drive file ID for a specific resource."""
         return self.get(f'google_drive.{resource_name}', '')
@@ -194,10 +250,6 @@ class ConfigManager:
         """Get essentials directory name."""
         return self.get('directory_names.essentials', 'ConvaiEssentials')
     
-    def get_editor_dir_name(self) -> str:
-        """Get editor directory name."""
-        return self.get('directory_names.editor', 'Editor')
-    
     # File name getters
     def get_config_file_name(self, file_type: str) -> str:
         """Get configuration file name by type."""
@@ -216,10 +268,6 @@ class ConfigManager:
         return self.get('file_names.build_file', 'Convai.Build.cs')
     
     # Asset name getters
-    def get_uploader_asset_name(self) -> str:
-        """Get uploader asset name."""
-        return self.get('asset_names.uploader_asset', 'AssetUploader.uasset')
-    
     def get_metahumans_folder_name(self) -> str:
         """Get MetaHumans folder name."""
         return self.get('asset_names.metahumans_folder', 'MetaHumans')

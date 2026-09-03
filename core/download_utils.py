@@ -2,17 +2,22 @@ import os
 import shutil
 import subprocess
 import time
-import zipfile
 from typing import Optional
 
 import gdown
 import requests
 
 from core.config_manager import config
+from core.exceptions import DownloadError
 from core.file_utility_manager import FileUtilityManager
 from core.github_manager import GitHubManager
 from core.plugin_manager import PluginManager
 from core.logger import logger
+
+# Without these two the project does not compile: the plugin is built from source, so a
+# missing SDK or ConvaiHTTP is a UBT module error at the end of a ten-minute build.
+CRITICAL_PLUGINS = ('convai_plugin', 'convai_http_plugin')
+
 
 class DownloadManager:
     
@@ -116,122 +121,130 @@ class DownloadManager:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     @staticmethod
-    def download_plugin_from_github(project_dir: str, plugin_name: str, version: str = None) -> bool:
+    def download_plugin_from_github(project_dir: str, plugin_name: str, engine_version: str = None) -> bool:
         """
         Generic function to download any plugin from GitHub release.
-        
+
         Args:
             project_dir: Project directory path
             plugin_name: Plugin configuration name (e.g., 'convai_plugin', 'convai_http_plugin')
-            version: Specific version to download, or None for latest
-            
+            engine_version: Engine version on disk, used to pick engine-specific assets
+
         Returns:
             True if successful, False otherwise
         """
         try:
             github_manager = GitHubManager()
             download_dir = os.path.join(project_dir, config.get_essentials_dir_name())
-            
+
             repo = config.get_github_repo(plugin_name)
             asset_patterns = config.get_github_asset_patterns(plugin_name)
             needs_post_process = config.get_github_post_process(plugin_name)
-            
+            marketplace_prefix = config.get(f'github.{plugin_name}.marketplace_prefix', '')
+            engine_specific = config.get(f'github.{plugin_name}.engine_specific', False)
+
             if not repo:
                 logger.error(f"{plugin_name} GitHub repository not configured")
                 return False
-            
+
+            # Without a version the asset match falls back to the first pattern hit, which
+            # is whatever engine the release happens to list first.
+            if engine_specific and not engine_version:
+                logger.error(f"{plugin_name} is engine-specific but no engine version was given")
+                return False
+
             # Download plugin from GitHub
             downloaded_file = github_manager.download_plugin_from_release(
                 repo=repo,
                 download_dir=download_dir,
-                version=version,
-                asset_patterns=asset_patterns
+                asset_patterns=asset_patterns,
+                engine_version=engine_version if engine_specific else None,
+                marketplace_prefix=marketplace_prefix
             )
-            
+
             if not downloaded_file:
                 logger.error(f"Failed to download {plugin_name} from GitHub")
                 return False
-            
-            # Handle content packs vs plugins differently
-            if plugin_name == "convai_convenience_pack":
-                # Content pack - extract to Content folder
-                extracted_path = DownloadManager.extract_content_pack(downloaded_file, project_dir)
-                if not extracted_path:
-                    logger.error(f"Failed to extract {plugin_name} content pack")
-                    return False
-            else:
-                # Regular plugin - extract to Plugins folder
-                extracted_path = DownloadManager.extract_plugin_zip(downloaded_file, project_dir)
-                if not extracted_path:
-                    logger.error(f"Failed to extract {plugin_name}")
-                    return False
-            
+
+            extracted_path = DownloadManager.extract_plugin_zip(downloaded_file, project_dir)
+            if not extracted_path:
+                logger.error(f"Failed to extract {plugin_name}")
+                return False
+
             # Post-process if needed (Convai-specific modifications)
             if needs_post_process and plugin_name == "convai_plugin":
                 if not PluginManager.post_process_convai_plugin(project_dir):
-                    logger.warning("Post-processing failed, but plugin was installed")
-            
+                    logger.error("Post-processing the Convai plugin failed")
+                    return False
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error downloading {plugin_name} from GitHub: {e}")
             return False
 
     @staticmethod
-    def download_modding_dependencies(project_dir: str, exclude_plugins: list[str] = None) -> None:
-        """Download all configured plugins from GitHub and Google Drive.
-        
+    def download_modding_dependencies(project_dir: str, engine_version: str) -> None:
+        """Download all configured plugins from GitHub.
+
         Args:
             project_dir: Project directory path
-            exclude_plugins: List of plugin names to exclude from download (e.g., ['convai_plugin'])
+            engine_version: Engine version on disk, used to pick engine-specific assets
+
+        Raises:
+            DownloadError: if a plugin the project cannot compile without failed.
         """
-        exclude_plugins = exclude_plugins or []
-        
-        # Download all configured GitHub plugins (excluding any specified)
-        github_plugins = [p for p in config.get_github_plugins() if p not in exclude_plugins]
-        success_count = 0
-        
+        github_plugins = config.get_github_plugins()
+        failed = []
+
         for i, plugin_name in enumerate(github_plugins, 1):
             logger.progress(i, len(github_plugins), f"Downloading {plugin_name.replace('_', ' ').title()}")
-            if DownloadManager.download_plugin_from_github(project_dir, plugin_name):
-                success_count += 1
-            else:
+            if not DownloadManager.download_plugin_from_github(project_dir, plugin_name, engine_version):
+                failed.append(plugin_name)
                 logger.warning(f"Failed to download {plugin_name}")
-        
-        if success_count == len(github_plugins):
+
+        critical = [name for name in failed if name in CRITICAL_PLUGINS]
+        if critical:
+            raise DownloadError(f"Required dependencies failed: {', '.join(critical)}")
+
+        if not failed:
             logger.success(f"Downloaded all {len(github_plugins)} dependencies successfully")
         else:
-            logger.warning(f"Downloaded {success_count}/{len(github_plugins)} dependencies")
-        
+            logger.warning(f"Downloaded {len(github_plugins) - len(failed)}/{len(github_plugins)} dependencies")
+
+    @staticmethod
+    def check_convai_plugin_available(engine_version: str) -> bool:
+        """Whether a Convai plugin asset exists for this engine, checked before the
+        ~400MB download so an unsupported engine fails in seconds."""
+        repo = config.get_github_repo("convai_plugin")
+        if not repo:
+            logger.error("convai_plugin GitHub repository not configured")
+            return False
+
+        releases = GitHubManager().get_releases(repo)
+        if releases is None:
+            logger.error(f"Failed to list releases for {repo}")
+            return False
+
+        resolved = GitHubManager.resolve_plugin_release(
+            releases,
+            engine_version,
+            config.get_github_asset_patterns("convai_plugin"),
+            config.get('github.convai_plugin.marketplace_prefix', '')
+        )
+        if not resolved:
+            logger.error(f"No Convai plugin release provides an asset for Unreal Engine {engine_version}")
+            return False
+
+        release, _, source = resolved
+        logger.info(f"Convai plugin for UE {engine_version}: {release.get('tag_name')} ({source})")
+        return True
+
     @staticmethod
     def download_convai_realusion_content(project_dir: str) -> None:
         DownloadManager.download_from_gdrive(config.get_google_drive_id("convai_reallusion_content"), os.path.join(project_dir, config.get_essentials_dir_name()), "ConvaiRealusionContent.zip")
         FileUtilityManager.unzip(os.path.join(project_dir, config.get_essentials_dir_name(), "ConvaiRealusionContent.zip"), os.path.join(project_dir))
 
-    @staticmethod
-    def extract_content_pack(zip_path: str, project_dir: str) -> Optional[str]:
-        """
-        Extract a content pack to the project's Content folder.
-        
-        Args:
-            zip_path: Path to the downloaded ZIP file
-            project_dir: Project directory path
-            
-        Returns:
-            Path to extracted content or None if extraction failed
-        """
-        content_dir = os.path.join(project_dir, "Content")
-        os.makedirs(content_dir, exist_ok=True)
-        
-        try:
-            logger.debug(f"Extracting content pack to Content folder...")
-            FileUtilityManager.unzip(zip_path, content_dir)
-            logger.debug("Content pack successfully extracted")
-            return content_dir
-        except Exception as e:
-            logger.error(f"Error extracting content pack: {e}")
-            return None
-    
     @staticmethod
     def is_toolchain_downloaded(ue_version: str) -> tuple[bool, str]:
         """
@@ -334,7 +347,6 @@ class DownloadManager:
         """
         from core.config_manager import config
         import ctypes
-        import sys
         import subprocess
         import os
         
@@ -355,43 +367,23 @@ class DownloadManager:
             
             if not is_admin():
                 logger.warning("⚠️  Admin privileges required for system-wide installation")
-                logger.info("🔄 Launching installer - please complete the installation and then press Enter...")
-                
-                # Use the simplest approach: just launch the exe like double-clicking it
+                logger.info("🎯 Launching the toolchain installer - please complete it in the window that opens")
+
                 try:
-                    # Launch installer like double-clicking in Windows Explorer
-                    logger.info("🎯 Launching installer GUI...")
                     os.startfile(installer_path)
-                    
-                    # Wait for user to complete installation
-                    logger.info("⏸️  Waiting for installation to complete...")
-                    print("\n📋 Please complete the installer and press Enter when finished...", end="", flush=True)
-                    
-                    # Use sys.stdin.readline() as alternative to input()
-                    import sys
-                    sys.stdin.flush()
-                    user_input = sys.stdin.readline()
-                    
-                    logger.info("🔍 Checking installation results...")
-                    
                 except Exception as e:
-                    logger.error(f"Failed to launch installer: {e}")
-                    # Fallback: Try with subprocess.Popen (fire and forget)
-                    try:
-                        logger.info("🔄 Trying alternative launch method...")
-                        subprocess.Popen([installer_path], shell=True)
-                        logger.info("⏸️  Waiting for installation to complete...")
-                        print("\n📋 Please complete the installer and press Enter when finished...", end="", flush=True)
-                        
-                        # Use sys.stdin.readline() as alternative to input()
-                        import sys
-                        sys.stdin.flush()
-                        user_input = sys.stdin.readline()
-                        
-                        logger.info("🔍 Checking installation results...")
-                    except Exception as e2:
-                        logger.error(f"All launch methods failed: {e2}")
-                        return False
+                    logger.debug(f"os.startfile failed, falling back to Popen: {e}")
+                    subprocess.Popen([installer_path], shell=True)
+
+                # The installer is a detached GUI, so completion is detected by polling for
+                # its output rather than by waiting on a prompt no GUI could answer.
+                logger.info("⏸️  Waiting for the installation to finish (up to 20 minutes)...")
+                build_path = os.path.join(toolchain_path, "build")
+                deadline = time.time() + 20 * 60
+                while not os.path.exists(build_path) and time.time() < deadline:
+                    time.sleep(3)
+
+                logger.info("🔍 Checking installation results...")
             else:
                 # We have admin privileges, install normally
                 install_command = [installer_path, "/S", f"/D={toolchain_path}"]
@@ -480,17 +472,19 @@ class DownloadManager:
             
             total_size = int(response.headers.get('content-length', 0))
             downloaded_size = 0
-            
+            last_decile = 0
+
             with open(exe_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
                         downloaded_size += len(chunk)
                         if total_size > 0:
-                            progress = (downloaded_size / total_size) * 100
-                            print(f"\rDownloading: {progress:.1f}%", end='', flush=True)
-            
-            print()  # New line after progress
+                            decile = downloaded_size * 10 // total_size
+                            if decile > last_decile:
+                                last_decile = decile
+                                logger.info(f"📥 Downloading toolchain: {decile * 10}%")
+
             logger.success(f"Downloaded {exe_filename}")
             
             # Step 4: Install from the downloaded installer
@@ -501,20 +495,26 @@ class DownloadManager:
             return False
     
     @staticmethod
-    def ensure_toolchain_for_version(ue_version: str) -> bool:
+    def ensure_toolchain_for_version(ue_version: str, force: bool = False) -> bool:
         """
         Ensure the correct toolchain is installed for a specific UE version.
         First checks existing installations, then downloads and installs if not present.
-        
+
+        This is the only entrance to the toolchain code, so the Linux flag is read here.
+
         Args:
             ue_version: The UE version to ensure toolchain for (e.g., "5.5", "5.6")
-            
+            force: Install even when Linux packaging is off (the Settings screen action)
+
         Returns:
             True if toolchain is available, False otherwise
         """
         from core.config_manager import config
-        import os
-        
+
+        if not force and not config.linux_packaging_enabled():
+            logger.info("Linux packaging is disabled; skipping cross-compilation toolchain")
+            return True
+
         toolchain_version = config.get_cross_compilation_toolchain(ue_version)
         logger.info(f"🔍 Ensuring toolchain {toolchain_version} for UE {ue_version}")
         

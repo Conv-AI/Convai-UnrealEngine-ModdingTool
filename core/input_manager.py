@@ -1,27 +1,43 @@
 import os
-import msvcrt
+import re
 import winreg
 from pathlib import Path
-import re
+from typing import List, Optional
 
 from core.config_manager import config
+from core.exceptions import ProjectError
 from core.unreal_engine_manager import UnrealEngineManager
 
+_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
+
 class InputManager:
-    """Handles all user input prompts across the Convai Modding Tool."""
+    """
+    Holds the answers the GUI has collected. The flows read them back through the
+    getters and never prompt: nothing here touches stdin.
+    """
     def __init__(self, script_dir: str):
         self.script_dir = Path(script_dir)
-        self._existing_projects = None
         self.project_name = None
         self.convai_api_key = None
         self.asset_type = None
         self.is_metahuman = None
         self.unreal_engine_path = None
+        self.target_unreal_engine_path = None
+        self.project_dir = None
+
+    def reset(self) -> None:
+        """Clear per-run answers so a second run cannot inherit the first one's."""
+        self.project_name = None
+        self.convai_api_key = None
+        self.asset_type = None
+        self.is_metahuman = None
+        self.project_dir = None
+        self.target_unreal_engine_path = None
 
     @staticmethod
-    def _find_registry_engines():
+    def find_registry_engines():
         engines = []
-        reg_path = r"SOFTWARE\\EpicGames\\Unreal Engine"  # ← raw string avoids the \U error
+        reg_path = r"SOFTWARE\EpicGames\Unreal Engine"  # ← raw string avoids the \U error
         try:
             with winreg.OpenKey(
                 winreg.HKEY_LOCAL_MACHINE,
@@ -46,195 +62,92 @@ class InputManager:
 
     def get_script_dir(self) -> str:
         return self.script_dir
-    
-    def get_user_flow_choice(self) -> str:
-        if self._existing_projects is None:
-            self._existing_projects = []
-            for root, dirs, files in os.walk(self.script_dir):
-                if config.get_essentials_dir_name() in dirs and any(f.endswith('.uproject') for f in files):
-                    self._existing_projects.append(root)
-        if not self._existing_projects:
-            return 'create'
-        while True:
-            target_ue_version = config.get_target_unreal_engine_version()
-            print('\nWhat do you want to do?')
-            print('1. Upload a new asset')
-            print('2. Update an existing asset')
-            print(f'3. Migrate an existing asset to {target_ue_version} UE version')
-            choice = input('Enter your choice (1, 2, or 3): ').strip()
-            if choice == '1':
-                return 'create'
-            if choice == '2':
-                return 'update'
-            if choice == '3':
-                return 'migrate'
-            print('Invalid input. Please enter 1, 2, or 3.')
 
-    def choose_project_dir(self) -> str:
-        if self._existing_projects is None:
-            self.get_user_flow_choice()
-        if not self._existing_projects:
-            print(f'❌ No modding projects found under:\n   {self.script_dir}')
-            input('Press Enter to exit...')
-            exit(1)
-        while True:
-            print('\nSelect a project to update:')
-            for idx, path in enumerate(self._existing_projects, 1):
-                print(f'  {idx}. {Path(path).name}')
-            choice = input(f'Enter choice [1-{len(self._existing_projects)}]: ').strip()
-            try:
-                sel = int(choice)
-                if 1 <= sel <= len(self._existing_projects):
-                    return self._existing_projects[sel - 1]
-            except ValueError:
-                pass
-            print(f"❌ '{choice}' is not valid. Enter a number between 1 and {len(self._existing_projects)}.")
+    def find_existing_projects(self) -> List[str]:
+        """Modding projects under the script directory, rescanned on every call."""
+        essentials_dir_name = config.get_essentials_dir_name()
+        projects = []
+        for root, dirs, files in os.walk(str(self.script_dir)):
+            if essentials_dir_name in dirs and any(f.endswith('.uproject') for f in files):
+                projects.append(root)
+                dirs[:] = []  # a project's own Content/ cannot hold another project
+        return projects
 
-    def get_unreal_engine_path(self, version_type: str = "current", require_user_confirmation: bool = False) -> str:
-        """
-        Get Unreal Engine path from user.
-        
-        Args:
-            version_type: "current" for current UE version, "target" for target UE version
-            require_user_confirmation: Whether to ask for user confirmation when auto-detecting paths
-        """
-        # Don't cache if we're asking for different version types
-        if version_type == "current" and self.unreal_engine_path:
-            return self.unreal_engine_path
-
-        # Get the appropriate version based on type
+    @staticmethod
+    def detect_engine_path(version_type: str = "current") -> Optional[str]:
+        """Registry lookup for an installed engine, exact version first. No prompting."""
         if version_type == "target":
             required_ue_version = config.get_target_unreal_engine_version()
-            path_validation_function = UnrealEngineManager.is_valid_target_engine_path
+            is_valid_path = UnrealEngineManager.is_valid_target_engine_path
         else:
             required_ue_version = config.get_current_unreal_engine_version()
-            path_validation_function = UnrealEngineManager.is_valid_current_engine_path
+            is_valid_path = UnrealEngineManager.is_valid_current_engine_path
 
-        # 1) Try the registry
-        for registry_version, registry_path_str in self._find_registry_engines():
-            registry_path_obj = Path(registry_path_str)
-            if path_validation_function(registry_path_obj):
-                # Check if this registry version matches what we're looking for
-                if registry_version == required_ue_version:
-                    if require_user_confirmation:
-                        user_response = input(f"Found Unreal Engine {registry_version} at:  {registry_path_obj}\nUse this? [Y/N]: ").strip().lower()
-                        if user_response not in ("", "y", "yes"):
-                            continue  # Skip this path and try next one
-                    
-                    if version_type == "current":
-                        self.unreal_engine_path = str(registry_path_obj)
-                    return str(registry_path_obj)
+        engines = InputManager.find_registry_engines()
+        for registry_version, registry_path_str in engines:
+            if registry_version == required_ue_version and is_valid_path(Path(registry_path_str)):
+                return registry_path_str
 
-        # Show all available engines if exact match not found
-        if require_user_confirmation:
-            print(f"\nLooking for Unreal Engine {required_ue_version}...")
-        for registry_version, registry_path_str in self._find_registry_engines():
-            registry_path_obj = Path(registry_path_str)
-            if path_validation_function(registry_path_obj):
-                if require_user_confirmation:
-                    user_response = input(f"Found Unreal Engine {registry_version} at:  {registry_path_obj}\nUse this? [Y/N]: ").strip().lower()
-                    if user_response not in ("", "y", "yes"):
-                        continue  # Skip this path and try next one
-                
-                if version_type == "current":
-                    self.unreal_engine_path = str(registry_path_obj)
-                return str(registry_path_obj)
+        for _, registry_path_str in engines:
+            if is_valid_path(Path(registry_path_str)):
+                return registry_path_str
 
-        # 2) Last resort: ask the user
-        while True:
-            user_input_path = input(f"Enter the Unreal Engine {required_ue_version} installation directory: ").strip()
-            user_provided_engine_path = Path(user_input_path)
-            if path_validation_function(user_provided_engine_path):
-                print(f"Using Unreal Engine path: {user_provided_engine_path}")
-                if version_type == "current":
-                    self.unreal_engine_path = str(user_provided_engine_path)
-                return str(user_provided_engine_path)
-            print(f"Invalid path. Please enter a valid Unreal Engine {required_ue_version} directory.")
-    
+        return None
+
+    def get_unreal_engine_path(self, version_type: str = "current") -> str:
+        cached = self.target_unreal_engine_path if version_type == "target" else self.unreal_engine_path
+        if cached:
+            return cached
+
+        detected = self.detect_engine_path(version_type)
+        if detected:
+            if version_type == "target":
+                self.target_unreal_engine_path = detected
+            else:
+                self.unreal_engine_path = detected
+            return detected
+
+        required_ue_version = (config.get_target_unreal_engine_version() if version_type == "target"
+                               else config.get_current_unreal_engine_version())
+        raise ProjectError(f"Unreal Engine {required_ue_version} path not provided")
+
+    def choose_project_dir(self) -> str:
+        if not self.project_dir:
+            raise ProjectError("No project selected")
+        return self.project_dir
+
+    @staticmethod
+    def validate_project_name(name: str, root) -> Optional[str]:
+        """Returns the reason a project name is unusable, or None when it is fine."""
+        if not name:
+            return "Project name cannot be empty."
+
+        max_length = config.get_max_project_name_length()
+        if len(name) > max_length:
+            return f"Project name must not exceed {max_length} characters."
+
+        if name[0].isdigit():
+            return "Project name cannot start with a digit."
+
+        if not _NAME_PATTERN.match(name):
+            return "Project name can only contain letters, digits, and underscores (no spaces or special characters)."
+
+        if (Path(root) / name).exists():
+            return f"A project named '{name}' already exists. Please choose a different name."
+
+        return None
+
     def get_project_name(self) -> str:
-        if self.project_name:
-            return self.project_name
-        
-        root = self.script_dir
-        name_pattern = re.compile(r"^[a-zA-Z0-9_]{1,20}$")  
-
-        while True:
-            name = input('Enter the Project Name : ').strip()
-            
-            # Check if the name is empty
-            if not name:
-                print("Error: Project name cannot be empty. Please enter a valid project name.")
-                continue
-            
-            # Check if the name exceeds maximum length
-            max_length = config.get_max_project_name_length()
-            if len(name) > max_length:
-                print(f"Error: Project name must not exceed {max_length} characters. Please try again.")
-                continue
-            
-            # Check if the name starts with a digit
-            if name[0].isdigit():
-                print("Error: Project name cannot start with a digit. Please try again.")
-                continue
-            
-            # Check for invalid characters (only letters, digits, and underscores allowed)
-            if not name_pattern.match(name):
-                print("Error: Project name can only contain letters, digits, and underscores (no spaces or special characters).")
-                continue
-            
-            # Check if the project name already exists
-            if (root / name).exists():
-                print(f"Error: A project named '{name}' already exists. Please choose a different name.")
-                continue
-            
-            self.project_name = name
-            return name
+        if not self.project_name:
+            raise ProjectError("Project name not provided")
+        return self.project_name
 
     def get_api_key(self) -> str:
-        if self.convai_api_key:
-            return self.convai_api_key
-        print('Enter the Convai API key: ', end='', flush=True)
-        key = ''
-        while True:
-            ch = msvcrt.getch()
-            if ch in {b'\r', b'\n'}:
-                print()
-                if key and key.isalnum():
-                    self.convai_api_key = key
-                    return key
-                print('Invalid API key. Please enter a valid alphanumeric key.')
-                return self.get_api_key()
-            if ch == b'\x08':
-                if key:
-                    key = key[:-1]
-                    print('\b \b', end='', flush=True)
-            elif ch == b'\x03':
-                raise KeyboardInterrupt
-            else:
-                char = ch.decode(errors='ignore')
-                if char.isalnum():
-                    key += char
-                    print('*', end='', flush=True)
+        if not self.convai_api_key:
+            raise ProjectError("Convai API key not provided")
+        return self.convai_api_key
 
     def get_asset_type(self) -> tuple[str, bool]:
-        if self.asset_type and self.is_metahuman is not None:
-            return self.asset_type, self.is_metahuman
-        while True:
-            print('Select the type of asset you want to create:')
-            print('1. Scene')
-            print('2. Avatar')
-            choice = input('Enter your choice (1 or 2): ').strip()
-            if choice == '1':
-                self.asset_type, self.is_metahuman = 'Scene', False
-                return self.asset_type, self.is_metahuman
-            if choice == '2':
-                while True:
-                    meta = input('Are you using a MetaHuman for your avatar? (y/n): ').strip().lower()
-                    if meta in ('y', 'yes'):
-                        self.asset_type, self.is_metahuman = 'Avatar', True
-                        return self.asset_type, self.is_metahuman
-                    if meta in ('n', 'no'):
-                        self.asset_type, self.is_metahuman = 'Avatar', False
-                        return self.asset_type, self.is_metahuman
-                    print('Invalid input. Please enter y or n.')
-            print('Invalid input. Please enter 1 or 2.')
+        if not self.asset_type or self.is_metahuman is None:
+            raise ProjectError("Asset type not provided")
+        return self.asset_type, self.is_metahuman

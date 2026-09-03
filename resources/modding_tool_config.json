@@ -17,18 +17,15 @@
     },
     "github": {
         "convai_plugin": {
-            "repo": "Conv-AI/Convai-UnrealEngine-SDK",
-            "asset_patterns": [".zip", "plugin", "unreal", "ue"],
+            "repo": "Conv-AI/Convai-UnrealEngine-SDK-V4",
+            "asset_patterns": ["-marketplace-no-binaries.zip"],
+            "marketplace_prefix": "marketplace-",
+            "engine_specific": true,
             "post_process": true
         },
         "convai_http_plugin": {
             "repo": "Conv-AI/Convai-UnrealEngine-HTTP",
             "asset_patterns": [".zip", "plugin", "unreal", "ue"],
-            "post_process": false
-        },
-        "convai_convenience_pack": {
-            "repo": "Conv-AI/Convai-UnrealEngine-CCPack",
-            "asset_patterns": [".zip", "pack", "convai", "convenience"],
             "post_process": false
         },
         "convai_pak_manager": {
@@ -58,7 +55,6 @@
         "content": "Content",
         "config": "Config",
         "essentials": "ConvaiEssentials",
-        "editor": "Editor",
         "source": "Source",
         "templates": "Templates"
     },
@@ -77,7 +73,6 @@
         "build_file": "Convai.Build.cs"
     },
     "asset_names": {
-        "uploader_asset": "AssetUploader.uasset",
         "metahumans_folder": "MetaHumans",
         "convenience_pack": "ConvaiConveniencePack",
         "template_name": "TP_Blank"

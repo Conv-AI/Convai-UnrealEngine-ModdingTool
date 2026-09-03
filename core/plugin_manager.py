@@ -1,14 +1,21 @@
 import os
 import json
 import re
-from typing import Optional
+import shutil
+from typing import Optional, Tuple
 
 from core.config_manager import config
 from core.logger import logger
 
+# The declaration is spelled BEnableConvaiHttp in V4 and bEnableConvaiHTTP in V3, so the
+# match is case-insensitive and the replacement keeps whatever spelling it found: renaming
+# the declaration alone would leave the use sites pointing at a symbol that no longer exists.
+HTTP_FLAG_PATTERN = r'(const\s+bool\s+bEnableConvaiHttp\s*=\s*)(?:true|false)\s*;'
+
+
 class PluginManager:
     """Manages plugin-specific operations like post-processing and configuration."""
-    
+
     @staticmethod
     def find_plugin_directory(project_dir: str, uplugin_filename: str) -> Optional[str]:
         """
@@ -39,36 +46,33 @@ class PluginManager:
         return None
 
     @staticmethod
-    def remove_engine_version_from_uplugin(uplugin_file_path: str) -> bool:
+    def clean_uplugin(uplugin_file_path: str) -> bool:
         """
-        Remove EngineVersion key from ConvAI.uplugin file.
-        
+        Strip EngineVersion and Installed from ConvAI.uplugin.
+
+        EngineVersion is dropped because migrate installs the plugin under the current
+        engine and only then bumps the copy to the target one. Installed: true is what
+        makes UBT skip compiling the plugin from source.
+
         Args:
             uplugin_file_path: Path to the ConvAI.uplugin file
-            
+
         Returns:
             True if successful, False otherwise
         """
         try:
-            logger.debug(f"Removing EngineVersion from plugin file")
-            
-            # Read the JSON file
             with open(uplugin_file_path, 'r', encoding='utf-8') as f:
                 plugin_data = json.load(f)
-            
-            # Remove EngineVersion if it exists
-            if 'EngineVersion' in plugin_data:
-                del plugin_data['EngineVersion']
-                logger.debug("Removed EngineVersion key")
-            else:
-                logger.debug("EngineVersion key not found (already removed)")
-            
-            # Write back the modified JSON
+
+            for key in ('EngineVersion', 'Installed'):
+                if plugin_data.pop(key, None) is not None:
+                    logger.debug(f"Removed {key} key from plugin descriptor")
+
             with open(uplugin_file_path, 'w', encoding='utf-8') as f:
                 json.dump(plugin_data, f, indent=4)
-            
+
             return True
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in uplugin file: {e}")
             return False
@@ -77,56 +81,52 @@ class PluginManager:
             return False
 
     @staticmethod
+    def strip_precompiled(plugin_dir: str) -> bool:
+        """Remove shipped build output so UBT compiles the plugin from source."""
+        for name in ("Binaries", "Intermediate"):
+            path = os.path.join(plugin_dir, name)
+            if not os.path.exists(path):
+                continue
+            shutil.rmtree(path, ignore_errors=True)
+            # A locked .dll leaves the tree behind on Windows and UBT then links the
+            # shipped build instead of compiling.
+            if os.path.exists(path):
+                logger.error(f"Could not remove precompiled {name} from the Convai plugin")
+                return False
+            logger.info(f"Removed precompiled {name} from the Convai plugin")
+        return True
+
+    @staticmethod
+    def set_convai_http_enabled(content: str) -> Tuple[str, int]:
+        """Turn on the ConvaiHTTP compile flag, returning (content, substitutions)."""
+        return re.subn(HTTP_FLAG_PATTERN, r'\1true;', content, flags=re.IGNORECASE)
+
+    @staticmethod
     def update_convai_build_file(build_file_path: str) -> bool:
         """
-        Update Convai.Build.cs to set bEnableConvaiHTTP = true and bUsePrecompiled = false.
-        
+        Update Convai.Build.cs to compile with ConvaiHTTP enabled.
+
         Args:
             build_file_path: Path to the Convai.Build.cs file
-            
+
         Returns:
             True if successful, False otherwise
         """
         try:
-            logger.debug("Updating build file settings")
-            
-            # Read the build file
             with open(build_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
-            modified = False
-            
-            # 1. Update bEnableConvaiHTTP = true
-            pattern_convai_http = r'const\s+bool\s+bEnableConvaiHTTP\s*=\s*(true|false)\s*;'
-            replacement_convai_http = 'const bool bEnableConvaiHTTP = true;'
-            
-            if re.search(pattern_convai_http, content):
-                content = re.sub(pattern_convai_http, replacement_convai_http, content)
-                logger.debug("Set bEnableConvaiHTTP = true")
-                modified = True
-            else:
-                logger.warning("bEnableConvaiHTTP declaration not found in build file")
-            
-            # 2. Update bUsePrecompiled = false
-            pattern_precompiled = r'bUsePrecompiled\s*=\s*(true|false)\s*;'
-            replacement_precompiled = 'bUsePrecompiled = false;'
-            
-            if re.search(pattern_precompiled, content):
-                content = re.sub(pattern_precompiled, replacement_precompiled, content)
-                logger.debug("Set bUsePrecompiled = false")
-                modified = True
-            else:
-                logger.warning("bUsePrecompiled assignment not found in build file")
-            
-            # Write back the modified content if any changes were made
-            if modified:
-                with open(build_file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                return True
-            else:
-                logger.warning("No build settings were modified")
+
+            content, count = PluginManager.set_convai_http_enabled(content)
+            if count == 0:
+                logger.error("bEnableConvaiHttp declaration not found in build file")
                 return False
-                
+
+            with open(build_file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            logger.debug("Enabled ConvaiHTTP in build file")
+            return True
+
         except Exception as e:
             logger.error(f"Error modifying build file: {e}")
             return False
@@ -151,21 +151,26 @@ class PluginManager:
             logger.error("Could not find Convai plugin directory")
             return False
         
-        # 1. Remove EngineVersion from ConvAI.uplugin
+        # 1. Force a source build, whether the zip was the marketplace or the compiled one.
+        # Surviving Binaries and a surviving "Installed": true each make UBT reuse the
+        # shipped build, which compiles ConvaiHTTP out again however step 2 goes.
+        if not PluginManager.strip_precompiled(convai_plugin_dir):
+            return False
+
         uplugin_file = os.path.join(convai_plugin_dir, convai_plugin_file)
-        if os.path.exists(uplugin_file):
-            if not PluginManager.remove_engine_version_from_uplugin(uplugin_file):
-                logger.warning("Failed to modify uplugin file")
-        else:
-            logger.warning(f"{convai_plugin_file} not found in plugin directory")
-        
-        # 2. Update Convai.Build.cs
+        if not PluginManager.clean_uplugin(uplugin_file):
+            logger.error(f"Failed to modify {convai_plugin_file}")
+            return False
+
+        # 2. Update Convai.Build.cs. A miss here silently compiles ConvaiHTTP out, so it
+        # fails the run rather than warning after a ten-minute build.
         build_file = os.path.join(convai_plugin_dir, "Source", "Convai", config.get_build_file_name())
-        if os.path.exists(build_file):
-            if not PluginManager.update_convai_build_file(build_file):
-                logger.warning("Failed to modify build file")
-        else:
-            logger.warning("Convai.Build.cs not found in plugin directory")
-        
+        if not os.path.exists(build_file):
+            logger.error("Convai.Build.cs not found in plugin directory")
+            return False
+
+        if not PluginManager.update_convai_build_file(build_file):
+            return False
+
         logger.debug("Convai plugin post-processing completed")
-        return True 
+        return True

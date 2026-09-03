@@ -1,9 +1,15 @@
 import requests
 import os
+import re
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from core.logger import logger
+
+# Release listings are fetched once per repo per process: the availability pre-check and
+# the download would otherwise burn two of GitHub's 60 unauthenticated calls per hour.
+_releases_cache: Dict[str, List[Dict]] = {}
+
 
 class GitHubManager:
     """
@@ -64,22 +70,110 @@ class GitHubManager:
                     
         return None
 
-    def find_matching_asset(self, assets: List[Dict], patterns: List[str]) -> Optional[Dict]:
+    def get_releases(self, repo: str, per_page: int = 100) -> Optional[List[Dict]]:
+        """
+        List a repository's releases, newest first, prereleases included.
+
+        Args:
+            repo: Repository in 'owner/repo' format
+            per_page: Number of releases to request
+
+        Returns:
+            List of release dicts or None if failed
+        """
+        cached = _releases_cache.get(repo)
+        if cached is not None:
+            return cached
+
+        api_url = f"https://api.github.com/repos/{repo}/releases?per_page={per_page}"
+
+        for attempt in range(self.max_retries):
+            try:
+                logger.debug(f"Listing releases from {repo}, attempt {attempt + 1}...")
+                response = requests.get(api_url, timeout=30)
+                response.raise_for_status()
+                releases = response.json()
+                _releases_cache[repo] = releases
+                return releases
+            except requests.RequestException as e:
+                logger.debug(f"Failed to list releases (Attempt {attempt + 1}/{self.max_retries}): {e}")
+                if attempt < self.max_retries - 1:
+                    time.sleep(2)
+
+        return None
+
+    @staticmethod
+    def asset_matches_engine(asset_name: str, engine_version: str) -> bool:
+        """Whether an asset targets exactly this engine. Substring matching would let
+        UE5.1 match Convai-UE5.10.zip."""
+        return bool(re.search(rf'ue{re.escape(engine_version)}(?!\d|\.\d)', asset_name, re.I))
+
+    @staticmethod
+    def find_matching_asset(assets: List[Dict], patterns: List[str],
+                            engine_version: str = None) -> Optional[Dict]:
         """
         Find the first asset that matches any of the given patterns.
-        
+
         Args:
             assets: List of asset dictionaries from GitHub API
             patterns: List of filename patterns to match
-            
+            engine_version: Engine version the asset must be built for, or None for any
+
         Returns:
             Matching asset dict or None if no match found
         """
         for pattern in patterns:
             for asset in assets:
                 asset_name = asset.get('name', '')
-                if pattern.lower() in asset_name.lower():
-                    return asset
+                if pattern.lower() not in asset_name.lower():
+                    continue
+                if engine_version and not GitHubManager.asset_matches_engine(asset_name, engine_version):
+                    continue
+                return asset
+        return None
+
+    @staticmethod
+    def resolve_plugin_release(releases: List[Dict], engine_version: str, patterns: List[str],
+                               marketplace_prefix: str) -> Optional[Tuple[Dict, Dict, str]]:
+        """
+        Pick the release to install from a repository that publishes each version twice:
+        a compiled release and a 'marketplace-' prerelease shipping source without binaries.
+
+        Returns:
+            (release, asset, 'marketplace' | 'compiled') or None if no release has an
+            asset for this engine.
+        """
+        marketplace = [r for r in releases if r.get('tag_name', '').startswith(marketplace_prefix)]
+        compiled = [r for r in releases
+                    if not r.get('tag_name', '').startswith(marketplace_prefix)
+                    and not r.get('prerelease', False)]
+
+        def match(release: Dict, pats: List[str]) -> Optional[Dict]:
+            return GitHubManager.find_matching_asset(release.get('assets', []), pats, engine_version)
+
+        # Prefer the marketplace twin of the newest compiled release: the two are published
+        # together, so that pairing is the version users are meant to be on.
+        if compiled:
+            twin_tag = marketplace_prefix + compiled[0].get('tag_name', '')
+            for release in marketplace:
+                if release.get('tag_name') == twin_tag:
+                    asset = match(release, patterns)
+                    if asset:
+                        return release, asset, 'marketplace'
+                    break
+
+        for release in marketplace:
+            asset = match(release, patterns)
+            if asset:
+                return release, asset, 'marketplace'
+
+        # No source release for this engine: the compiled one is stripped back to source
+        # after install, so both paths end up identical.
+        for release in compiled:
+            asset = match(release, ['.zip'])
+            if asset:
+                return release, asset, 'compiled'
+
         return None
 
     def download_file_from_url(self, url: str, file_path: str, filename: str) -> bool:
@@ -132,48 +226,72 @@ class GitHubManager:
                         
         return False
 
-    def download_plugin_from_release(self, repo: str, download_dir: str, 
-                                   version: str = None, asset_patterns: List[str] = None) -> Optional[str]:
+    def download_plugin_from_release(self, repo: str, download_dir: str,
+                                   version: str = None, asset_patterns: List[str] = None,
+                                   engine_version: str = None,
+                                   marketplace_prefix: str = None) -> Optional[str]:
         """
         Download a plugin from a GitHub release.
-        
+
         Args:
             repo: Repository in 'owner/repo' format
             download_dir: Directory to save the downloaded file
             version: Specific version tag, or None for latest
             asset_patterns: List of filename patterns to match
-            
+            engine_version: Engine version the asset must be built for, or None for any
+            marketplace_prefix: Tag prefix of the source-only releases, or None to use
+                the latest release as-is
+
         Returns:
             Path to downloaded file or None if failed
         """
-        # Get release information
-        if version:
-            release_info = self.get_release_by_tag(repo, version)
+        patterns = asset_patterns or ['.zip']
+
+        if marketplace_prefix:
+            releases = self.get_releases(repo)
+            if releases is None:
+                logger.error(f"Failed to list releases for {repo}")
+                return None
+
+            resolved = self.resolve_plugin_release(releases, engine_version, patterns, marketplace_prefix)
+            if not resolved:
+                logger.error(f"No {repo} release has an asset for Unreal Engine {engine_version}")
+                logger.debug("Available marketplace tags: " + ", ".join(
+                    r.get('tag_name', '') for r in releases
+                    if r.get('tag_name', '').startswith(marketplace_prefix)))
+                return None
+
+            release_info, asset, source = resolved
+            asset_name = asset.get('name')
+            logger.info(f"Resolved {repo} {release_info.get('tag_name')} ({source}): {asset_name}")
         else:
-            release_info = self.get_latest_release(repo)
-        
-        if not release_info:
-            logger.error(f"Failed to get release information for {repo}")
-            return None
-        
-        release_name = release_info.get('name', 'Unknown')
-        release_tag = release_info.get('tag_name', 'Unknown')
-        logger.debug(f"Found release: {release_name} ({release_tag})")
-        
-        # Find matching asset
-        assets = release_info.get('assets', [])
-        asset = self.find_matching_asset(assets, asset_patterns or ['.zip'])
-        
-        if not asset:
-            logger.error(f"No suitable asset found in release.")
-            logger.debug("Available assets:")
-            for a in assets:
-                logger.debug(f"  - {a.get('name', 'Unknown')}")
-            return None
-        
-        asset_name = asset.get('name')
-        logger.debug(f"Selected asset: {asset_name}")
-        
+            if version:
+                release_info = self.get_release_by_tag(repo, version)
+            else:
+                release_info = self.get_latest_release(repo)
+
+            if not release_info:
+                logger.error(f"Failed to get release information for {repo}")
+                return None
+
+            release_name = release_info.get('name', 'Unknown')
+            release_tag = release_info.get('tag_name', 'Unknown')
+            logger.debug(f"Found release: {release_name} ({release_tag})")
+
+            assets = release_info.get('assets', [])
+            asset = self.find_matching_asset(assets, patterns, engine_version)
+
+            if not asset:
+                logger.error(f"No suitable asset found in release.")
+                logger.debug("Available assets:")
+                for a in assets:
+                    logger.debug(f"  - {a.get('name', 'Unknown')}")
+                return None
+
+            asset_name = asset.get('name')
+            logger.debug(f"Selected asset: {asset_name}")
+
+
         if not asset.get('browser_download_url'):
             logger.error("No download URL found in asset")
             return None

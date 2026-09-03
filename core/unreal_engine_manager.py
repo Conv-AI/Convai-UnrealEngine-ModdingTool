@@ -7,7 +7,9 @@ from pathlib import Path
 
 from core.config_manager import config
 from core.download_utils import DownloadManager
+from core.exceptions import BuildError
 from core.file_utility_manager import FileUtilityManager
+from core.migration import build_migration_notes, write_migration_notes
 from core.plugin_manager import PluginManager
 from core.logger import logger
 
@@ -80,7 +82,7 @@ class UnrealEngineManager:
                                 continue
                             existing_sections.setdefault(current, []).append(line.strip())
             except Exception as e:
-                logger.warn(f"{not_found_warning}: {e}")
+                logger.warning(f"{not_found_warning}: {e}")
                 existing_sections = {}
         
         desired_sections = UnrealEngineManager._parse_ini_sections(desired_content)
@@ -174,8 +176,7 @@ class UnrealEngineManager:
             "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe"
         )
         if not os.path.exists(ubt):
-            logger.error(f"UnrealBuildTool not found: {ubt}")
-            return
+            raise BuildError(f"UnrealBuildTool not found: {ubt}")
         cmd = [
             ubt,
             f"-Project={self.project_dir}/{self.project_name}.uproject",
@@ -186,20 +187,29 @@ class UnrealEngineManager:
             "-NoHotReload",
         ]
         logger.info("Starting project compilation...")
-        
-        # Run compilation with live output streaming (just like original)
-        result = subprocess.run(cmd, shell=True)
-        
-        # Final status
-        if result.returncode != 0:
-            logger.error("Compilation failed")
-        else:
-            logger.success("Compilation completed successfully")
-            
+
+        # Streamed through the logger rather than inherited stdout: the GUI hides the
+        # console, and the log panel is then the only place build output shows up.
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+        )
+        for line in process.stdout:
+            logger.info(line.rstrip())
+        process.wait()
+
         # Log file information for detailed troubleshooting
         log_file = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'UnrealBuildTool', 'Log.txt')
         if os.path.exists(log_file):
             logger.info(f"Full build log also available at: {log_file}")
+
+        if process.returncode != 0:
+            raise BuildError(f"Compilation failed with exit code {process.returncode}")
+        logger.success("Compilation completed successfully")
 
     def enable_plugins(self, plugins: list[str]) -> None:
         uproject_path = os.path.join(self.project_dir, f"{self.project_name}.uproject")
@@ -235,33 +245,64 @@ class UnrealEngineManager:
         self._update_engine_ini(self.project_dir, api_key)
         self._update_input_ini(self.project_dir)
 
-    def update_modding_dependencies(self) -> None:
+    @staticmethod
+    def _find_convai_plugin(project_dir: str) -> tuple:
+        """
+        Locate the installed Convai plugin.
+
+        Returns:
+            (directory, VersionName) - (None, None) when no plugin is installed, and a
+            version of 'unknown' when the .uplugin cannot be read.
+        """
+        plugin_file = config.get_plugin_file_name("convai")
+        plugin_dir = PluginManager.find_plugin_directory(project_dir, plugin_file)
+        if not plugin_dir:
+            return None, None
+        try:
+            with open(os.path.join(plugin_dir, plugin_file), 'r', encoding='utf-8') as f:
+                return plugin_dir, json.load(f).get('VersionName') or 'unknown'
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.debug(f"Could not read plugin version: {e}")
+            return plugin_dir, 'unknown'
+
+    def update_modding_dependencies(self) -> dict:
+        """
+        Replace every Convai dependency with the current release.
+
+        Returns:
+            What changed: old/new Convai plugin VersionName, whether a project-level
+            convenience pack was removed, and the notes text written into the project
+            (None when there was nothing worth reporting).
+        """
         logger.subsection("Analyzing Current Installation")
-        
+
         content_dir = os.path.join(self.project_dir, config.get_content_dir_name())
         paths_to_delete = []
-        
-        # Use find_plugin_directory to locate existing Convai plugins from config
-        # Note: Exclude main Convai plugin from updates - only update helper plugins
-        convai_plugin_names = [
-            config.get_plugin_file_name("convai_http"), 
+
+        # V4 is a source build, so the main plugin is replaced too, not left in place
+        convai_plugin_dir, old_plugin_version = self._find_convai_plugin(self.project_dir)
+        if convai_plugin_dir:
+            paths_to_delete.append(convai_plugin_dir)
+            logger.info(f"Found existing Convai plugin ({old_plugin_version}) to replace")
+
+        helper_plugin_names = [
+            config.get_plugin_file_name("convai_http"),
             config.get_plugin_file_name("convai_pak_manager")
         ]
-        
+
         plugin_count = 0
-        for plugin_file in convai_plugin_names:
+        for plugin_file in helper_plugin_names:
             plugin_dir = PluginManager.find_plugin_directory(self.project_dir, plugin_file)
             if plugin_dir:
                 paths_to_delete.append(plugin_dir)
                 plugin_count += 1
-        
-        # Add content pack directory if it exists
+
+        # The convenience pack now ships inside the plugin, so a project-level copy is stale
         convenience_pack_dir = os.path.join(content_dir, config.get_convenience_pack_name())
-        content_pack_found = False
-        if os.path.exists(convenience_pack_dir):
+        pack_removed = os.path.exists(convenience_pack_dir)
+        if pack_removed:
             paths_to_delete.append(convenience_pack_dir)
-            content_pack_found = True
-        
+
         # Get zip files from ConvaiEssentials directory
         zip_dir = os.path.join(self.project_dir, config.get_essentials_dir_name())
         zip_files = []
@@ -270,42 +311,45 @@ class UnrealEngineManager:
 
         # Log what was found
         if plugin_count > 0:
-            logger.info(f"Found {plugin_count} existing plugin(s) to update")
-        if content_pack_found:
-            logger.info("Found existing content pack to update")
+            logger.info(f"Found {plugin_count} existing helper plugin(s) to update")
+        if pack_removed:
+            logger.info("Found a project-level convenience pack to remove")
         if zip_files:
             logger.info(f"Found {len(zip_files)} zip file(s) to clean up")
+
+        # The deletes below are the point of no return: after them the tree no longer
+        # says what was replaced, so the notes are written now and rewritten with the
+        # real new version once the download lands.
+        notes = build_migration_notes(old_plugin_version, None, pack_removed)
+        if notes:
+            write_migration_notes(self.project_dir, notes)
 
         # Delete old installations and download fresh copies
         if paths_to_delete:
             logger.step(f"Removing {len(paths_to_delete)} existing installation(s)...")
             FileUtilityManager.delete_paths(paths_to_delete)
-        
+
         if zip_files:
             logger.step("Cleaning up old zip files...")
             FileUtilityManager.delete_paths(zip_files)
-        
+
         logger.step("Downloading latest dependencies...")
-        # Exclude main Convai plugin from updates - only update helper plugins
-        DownloadManager.download_modding_dependencies(self.project_dir, exclude_plugins=["convai_plugin"])
-    
+        DownloadManager.download_modding_dependencies(self.project_dir, self.engine_version)
+
+        _, new_plugin_version = self._find_convai_plugin(self.project_dir)
+        notes = build_migration_notes(old_plugin_version, new_plugin_version, pack_removed)
+        if notes:
+            write_migration_notes(self.project_dir, notes)
+
+        return {
+            'old_plugin_version': old_plugin_version,
+            'new_plugin_version': new_plugin_version,
+            'pack_removed': pack_removed,
+            'notes': notes,
+        }
+
     def configure_assets_in_project(self, asset_type: str, is_metahuman: bool) -> None:
         logger.debug("Configuring project assets...")
-        
-        # Find ConvaiPakManager plugin directory dynamically
-        pak_manager_dir = PluginManager.find_plugin_directory(self.project_dir, config.get_plugin_file_name("convai_pak_manager"))
-        if not pak_manager_dir:
-            logger.error("ConvaiPakManager plugin directory not found")
-            return
-        
-        source = os.path.join(pak_manager_dir, config.get_content_dir_name(), config.get_editor_dir_name(), config.get_uploader_asset_name())
-        destination = os.path.join(self.project_dir, config.get_content_dir_name(), config.get_editor_dir_name())
-        
-        if not os.path.exists(source):
-            logger.error(f"{config.get_uploader_asset_name()} not found at expected location")
-            return
-            
-        FileUtilityManager.copy_file_to_directory(source, destination)
 
         if asset_type == "Scene" and not is_metahuman:
             self.remove_metahuman_folder()
@@ -327,7 +371,12 @@ class UnrealEngineManager:
 
         # Cross-compilation toolchain check with auto-download
         from core.download_utils import DownloadManager
-        
+
+        # Cheap: tells a user on an unsupported engine now, not after a 400MB download
+        if not DownloadManager.check_convai_plugin_available(self.engine_version):
+            logger.error(f"No Convai plugin release is available for Unreal Engine {self.engine_version}")
+            return False
+
         current_ue_version = config.get_current_unreal_engine_version()
         logger.step(f"Ensuring toolchain for UE {current_ue_version}...")
         
@@ -339,38 +388,34 @@ class UnrealEngineManager:
         logger.success(f"All prerequisites met for UE {current_ue_version} modding project")
         return True
     
-    def update_existing_project(self, asset_type: str, is_metahuman: bool, plugin_name: str, api_key: str) -> bool:
+    def update_existing_project(self, asset_type: str, is_metahuman: bool, plugin_name: str, api_key: str) -> dict:
         """
         Update an existing modding project with current dependencies and configuration.
-        
+
         Args:
             asset_type: Type of asset (scene/avatar)
             is_metahuman: Whether the project uses MetaHuman
             plugin_name: Name of the content plugin
             api_key: Convai API key
-            
+
         Returns:
-            True if update successful, False otherwise
+            The update_modding_dependencies report. Raises on failure: a half-updated
+            project is unbuildable, and the caller cannot tell that from a False.
         """
-        try:
-            logger.step("Checking project engine version...")
-            if not self.update_project_engine_version():
-                logger.warning("Failed to update project engine version, but continuing...")
-            
-            logger.step("Updating Convai dependencies...")
-            self.update_modding_dependencies()
-            
-            logger.step("Configuring project assets...")
-            self.configure_assets_in_project(asset_type, is_metahuman)
-            
-            self.update_ini_files(plugin_name, api_key)
-                        
-            logger.success("Project updated successfully!")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to update project: {e}")
-            return False
+        logger.step("Checking project engine version...")
+        if not self.update_project_engine_version():
+            logger.warning("Failed to update project engine version, but continuing...")
+
+        logger.step("Updating Convai dependencies...")
+        report = self.update_modding_dependencies()
+
+        logger.step("Configuring project assets...")
+        self.configure_assets_in_project(asset_type, is_metahuman)
+
+        self.update_ini_files(plugin_name, api_key)
+
+        logger.success("Project updated successfully!")
+        return report
         
     def can_create_migrated_project(self) -> bool:
         """
@@ -636,7 +681,7 @@ MetaDataTagsForAssetRegistry=()
         # Desired settings content (by section)
         lines_to_add = f"""
 [/Script/EngineSettings.GameMapsSettings]
-GlobalDefaultGameMode=/Game/ConvaiConveniencePack/Sample/BP_SampleGameMode.BP_SampleGameMode_C
+GlobalDefaultGameMode=/ConvAI/ConvaiConveniencePack/Sample/BP_SampleGameMode.BP_SampleGameMode_C
 
 [/Script/WindowsTargetPlatform.WindowsTargetSettings]
 DefaultGraphicsRHI=DefaultGraphicsRHI_DX12
@@ -757,16 +802,6 @@ bReportStats=False
 ConnectionType=USBOnly
 bUseManualIPAddress=False
 ManualIPAddress=
-
-[/Script/LinuxTargetPlatform.LinuxTargetSettings]
-SpatializationPlugin=
-SourceDataOverridePlugin=
-ReverbPlugin=
-OcclusionPlugin=
-SoundCueCookQualityIndex=-1
--TargetedRHIs=SF_VULKAN_SM5
-+TargetedRHIs=SF_VULKAN_SM5
-+TargetedRHIs=SF_VULKAN_SM6
 
 [/Script/Engine.NetworkSettings]
 n.VerifyPeer=False

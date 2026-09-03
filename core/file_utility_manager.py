@@ -34,19 +34,6 @@ class FileUtilityManager:
             raise
 
     @staticmethod
-    def copy_file_to_directory(src: str, dst_dir: str) -> None:
-        """
-        Copies a file into a target directory, creating the directory if needed.
-        """
-        try:
-            os.makedirs(dst_dir, exist_ok=True)
-            shutil.copy(src, dst_dir)
-            logger.debug(f"Copied file: {os.path.basename(src)}")
-        except Exception as e:
-            logger.error(f"Failed to copy {src} to {dst_dir}: {e}")
-            raise
-
-    @staticmethod
     def copy_directory(src: str, dst: str) -> bool:
         """
         Copies an entire directory tree to a new location.
