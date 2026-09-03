@@ -262,7 +262,7 @@ def main():
     _hide_own_console()
     suppress_external_logging()
 
-    from gui.app import run_gui
+    from gui.host import run_gui
     run_gui(TOOL_VERSION, input_manager, {
         "create": CreateModdingProject,
         "update": UpdateModdingProject,

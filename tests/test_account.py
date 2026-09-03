@@ -15,8 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gui import account
-from gui.account import AccountSession, AuthError, BrowserLogin
+from core import account
+from core.account import AccountSession, AuthError, BrowserLogin
 
 
 class FakeResponse:

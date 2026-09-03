@@ -1,4 +1,4 @@
-"""Convai sign-in: the session, the browser login and the sign-in modal.
+"""Convai sign-in: the session and the browser login.
 
 The protocol is the one the Convai UE editor plugin uses, so a user who has signed in
 there recognises this flow:
@@ -16,6 +16,9 @@ Two deliberate differences from the plugin: the listener binds 127.0.0.1 rather 
 every interface, and the wait has a real timeout. The callback carries no state or
 nonce -- the login page correlates only by port -- so keeping the socket off the LAN and
 short-lived is the whole of the defence available here.
+
+Nothing here touches a UI toolkit: the browser wait blocks, so a caller runs it on a
+worker and reports back however it likes.
 """
 
 from __future__ import annotations
@@ -24,7 +27,6 @@ import http.server
 import json
 import os
 import threading
-import tkinter as tk
 import urllib.parse
 import webbrowser
 from pathlib import Path
@@ -32,8 +34,6 @@ from typing import Callable, Optional
 
 import requests
 
-from gui.components import Field, button, pill
-from gui.theme import FONTS, SPACE, theme
 
 LOGIN_URL = "https://login.convai.com/?ue=true&port={port}"
 DECRYPT_URL = "https://login.convai.com/api/decrypt"
@@ -277,192 +277,3 @@ class AccountSession:
         except OSError:
             # A session that cannot be cached still works for this run.
             pass
-
-
-class SignInModal:
-    """The focused sign-in dialog: Google first, an API key behind it."""
-
-    def __init__(self, app, on_success: Callable[[], None], on_dismiss: Optional[Callable[[], None]] = None):
-        self.app = app
-        self.on_success = on_success
-        self.on_dismiss = on_dismiss
-        self.window: Optional[tk.Toplevel] = None
-        self.login: Optional[BrowserLogin] = None
-        self.key_field: Optional[Field] = None
-        self.body: Optional[tk.Frame] = None
-        self.status: Optional[tk.Label] = None
-
-    # --- window ---------------------------------------------------------
-
-    def open(self) -> None:
-        window = tk.Toplevel(self.app.root)
-        self.window = window
-        window.title("Sign in to Convai")
-        window.configure(bg=theme["bg_surface"])
-        window.transient(self.app.root)
-        window.resizable(False, False)
-        window.protocol("WM_DELETE_WINDOW", self.dismiss)
-        window.bind("<Escape>", lambda event: self.dismiss(), add="+")
-
-        self.body = tk.Frame(window, background=theme["bg_surface"], padx=SPACE["section"], pady=SPACE["section"])
-        self.body.pack(fill="both", expand=True)
-        self._show_choice()
-
-        window.update_idletasks()
-        x = self.app.root.winfo_rootx() + (self.app.root.winfo_width() - window.winfo_width()) // 2
-        y = self.app.root.winfo_rooty() + (self.app.root.winfo_height() - window.winfo_height()) // 3
-        window.geometry(f"+{max(x, 0)}+{max(y, 0)}")
-        window.grab_set()
-
-    def dismiss(self) -> None:
-        if self.login is not None:
-            self.login.cancel()
-            self.login = None
-        if self.window is not None:
-            self.window.grab_release()
-            self.window.destroy()
-            self.window = None
-        if self.on_dismiss:
-            self.on_dismiss()
-
-    def _clear(self) -> tk.Frame:
-        for child in self.body.winfo_children():
-            child.destroy()
-        return self.body
-
-    # --- views ----------------------------------------------------------
-
-    def _show_choice(self) -> None:
-        body = self._clear()
-        tk.Label(body, text="Sign in to Convai", background=theme["bg_surface"],
-                 foreground=theme["text_primary"], font=FONTS["section_title"]).pack(anchor="w")
-        tk.Label(body, text="Connect once to create, update, and manage projects.",
-                 background=theme["bg_surface"], foreground=theme["text_secondary"],
-                 font=FONTS["body"], wraplength=380, justify="left").pack(anchor="w", pady=(6, SPACE["section"]))
-
-        google = button(body, "Continue with Google", self._start_browser_login, kind="primary",
-                        accessible_name="Sign in to Convai with Google in your browser")
-        google.pack(fill="x")
-
-        divider = tk.Frame(body, background=theme["bg_surface"])
-        divider.pack(fill="x", pady=SPACE["tight"] * 2)
-        tk.Frame(divider, background=theme["border_subtle"], height=1).pack(side="left", fill="x", expand=True)
-        tk.Label(divider, text="or", background=theme["bg_surface"], foreground=theme["text_secondary"],
-                 font=FONTS["meta"], padx=10).pack(side="left")
-        tk.Frame(divider, background=theme["border_subtle"], height=1).pack(side="left", fill="x", expand=True)
-
-        button(body, "Use an API key instead", self._show_api_key, kind="secondary").pack(fill="x")
-
-        self.status = tk.Label(body, text="", background=theme["bg_surface"],
-                               foreground=theme["text_secondary"], font=FONTS["meta"],
-                               wraplength=380, justify="left")
-        self.status.pack(anchor="w", pady=(SPACE["tight"], 0))
-
-        footer = tk.Frame(body, background=theme["bg_surface"])
-        footer.pack(fill="x", pady=(SPACE["section"], 0))
-        button(footer, "Not now", self.dismiss, kind="quiet", compact=True).pack(side="left")
-        button(footer, "Open Convai dashboard", lambda: webbrowser.open(DASHBOARD_URL, new=2),
-               kind="quiet", compact=True).pack(side="right")
-
-    def _show_api_key(self) -> None:
-        body = self._clear()
-        header = tk.Frame(body, background=theme["bg_surface"])
-        header.pack(fill="x")
-        button(header, "< Back", self._show_choice, kind="quiet", compact=True).pack(side="left")
-
-        tk.Label(body, text="Sign in with an API key", background=theme["bg_surface"],
-                 foreground=theme["text_primary"], font=FONTS["section_title"]).pack(anchor="w", pady=(SPACE["tight"], 0))
-
-        self.key_field = Field(body, "Convai API key", tk.StringVar(), show="•", surface="bg_surface",
-                               help_text="Your key is stored on this computer only, for this tool.")
-        self.key_field.pack(fill="x", pady=(SPACE["tight"], 0))
-        self.key_field.focus()
-
-        self.status = tk.Label(body, text="", background=theme["bg_surface"],
-                               foreground=theme["text_secondary"], font=FONTS["meta"],
-                               wraplength=380, justify="left")
-        self.status.pack(anchor="w", pady=(SPACE["tight"], 0))
-
-        actions = tk.Frame(body, background=theme["bg_surface"])
-        actions.pack(fill="x", pady=(SPACE["section"], 0))
-        button(actions, "Open Convai dashboard", lambda: webbrowser.open(DASHBOARD_URL, new=2),
-               kind="quiet", compact=True).pack(side="left")
-        self.key_button = button(actions, "Sign in", self._submit_key, kind="primary")
-        self.key_button.pack(side="right")
-        self.key_field.entry.bind("<Return>", lambda event: self._submit_key(), add="+")
-
-    # --- flows ----------------------------------------------------------
-
-    def _set_status(self, text: str, tone: str = "text_secondary") -> None:
-        if self.status is not None and self.status.winfo_exists():
-            self.status.configure(text=text, foreground=theme[tone])
-
-    def _start_browser_login(self) -> None:
-        self._set_status("Opening your browser… complete the sign-in there, then come back.")
-        self.login = BrowserLogin()
-        login = self.login
-
-        body = self.body
-        for child in body.winfo_children():
-            if isinstance(child, tk.Button):
-                child.configure(state="disabled")
-
-        def work() -> None:
-            try:
-                api_key, username, email = login.run()
-            except AuthError as exc:
-                self._on_tk(lambda message=str(exc): self._fail(message))
-            except requests.RequestException:
-                self._on_tk(lambda: self._fail("Couldn't reach Convai. Try again."))
-            else:
-                self._on_tk(lambda: self._succeed(api_key, username, email))
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _submit_key(self) -> None:
-        key = self.key_field.variable.get().strip()
-        if not key:
-            self.key_field.set_error("Enter your Convai API key.")
-            self.key_field.focus()
-            return
-
-        self.key_field.set_error(None)
-        self.key_field.set_enabled(False)
-        self.key_button.configure(state="disabled", text="Verifying…")
-
-        def work() -> None:
-            try:
-                _verify_key(key)
-            except AuthError as exc:
-                self._on_tk(lambda message=str(exc): self._key_failed(message))
-            except requests.RequestException:
-                self._on_tk(lambda: self._key_failed("Couldn't reach Convai. Try again."))
-            else:
-                self._on_tk(lambda: self._succeed(key, "", ""))
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _on_tk(self, action: Callable[[], None]) -> None:
-        """Marshal a worker result back, unless the dialog is already gone."""
-        def guarded() -> None:
-            if self.window is not None and self.window.winfo_exists():
-                action()
-
-        self.app.root.after(0, guarded)
-
-    def _key_failed(self, message: str) -> None:
-        self.key_field.set_enabled(True)
-        self.key_field.set_error(message)
-        self.key_field.focus()
-        self.key_button.configure(state="normal", text="Sign in")
-
-    def _fail(self, message: str) -> None:
-        self.login = None
-        self._show_choice()
-        self._set_status(message, tone="danger")
-
-    def _succeed(self, api_key: str, username: str, email: str) -> None:
-        self.login = None
-        self.app.account.adopt(api_key, username, email)
-        self.dismiss()
-        self.on_success()
