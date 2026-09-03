@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import requests
 from dataclasses import dataclass
@@ -45,6 +46,12 @@ class ConfigManager:
     VERSION_FILE_PATH = "Version.json"
     UPLOADER_CONFIG_FILE_PATH = "resources/asset_uploader_config.json"
 
+    # Config ships via main, so a config change cannot be exercised until it is merged -
+    # and merging it early breaks every distributed exe. Set either of these to try one
+    # first: a branch name, or a checkout directory to read the files straight off disk.
+    BRANCH_ENV = "CONVAI_MODDING_CONFIG_BRANCH"
+    LOCAL_ENV = "CONVAI_MODDING_CONFIG_DIR"
+
     def __new__(cls) -> 'ConfigManager':
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -73,6 +80,12 @@ class ConfigManager:
 
         config_data = self._fetch_json(self.CONFIG_FILE_PATH)
         if not config_data:
+            local_dir = os.environ.get(self.LOCAL_ENV)
+            if local_dir:
+                raise ConfigurationError(
+                    f"Failed to read config from {self.LOCAL_ENV}={local_dir}. "
+                    f"Expected {self.CONFIG_FILE_PATH} under it."
+                )
             raise ConfigurationError(
                 f"Failed to load config after {self._max_attempts} attempts. "
                 "Please ensure GitHub is accessible."
@@ -93,7 +106,24 @@ class ConfigManager:
 
     def _fetch_json(self, file_path: str) -> Optional[Dict[str, Any]]:
         """Fetch JSON from GitHub with retry logic and exponential backoff."""
-        url = f"https://raw.githubusercontent.com/{self.GITHUB_REPO}/{self.GITHUB_BRANCH}/{file_path}"
+        local_dir = os.environ.get(self.LOCAL_ENV)
+        if local_dir:
+            local_path = os.path.join(local_dir, *file_path.split('/'))
+            try:
+                with open(local_path, 'r', encoding='utf-8') as handle:
+                    data = json.load(handle)
+            except (OSError, json.JSONDecodeError) as e:
+                # Don't fall through to the network: a half-local config is worse than a
+                # clear stop, and the caller turns None into a visible failure.
+                logger.error(f"{self.LOCAL_ENV} is set but {local_path} is unusable: {e}")
+                return None
+            logger.warning(f"Using local config override: {local_path}")
+            return data
+
+        branch = os.environ.get(self.BRANCH_ENV) or self.GITHUB_BRANCH
+        if branch != self.GITHUB_BRANCH:
+            logger.warning(f"Using config branch override: {branch}")
+        url = f"https://raw.githubusercontent.com/{self.GITHUB_REPO}/{branch}/{file_path}"
         
         for attempt in range(self._max_attempts):
             try:
@@ -167,7 +197,6 @@ class ConfigManager:
     
     def get_cross_compilation_download_directory(self) -> str:
         """Get cross-compilation toolchain download directory (for .exe installers)."""
-        import os
         directory = self.get('cross_compilation.toolchain_download_directory', '%APPDATA%\\ConvaiModdingTool\\Downloads')
         return os.path.expandvars(directory)
     

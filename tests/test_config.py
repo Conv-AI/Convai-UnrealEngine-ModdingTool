@@ -156,6 +156,50 @@ def test_tool_version():
     assert ConvaiModdingTool.TOOL_VERSION == shipped, (ConvaiModdingTool.TOOL_VERSION, shipped)
 
 
+def test_config_source_override():
+    """T-CFG-7: the overrides let a config change be tested before it reaches main.
+
+    The local one must not fall through to the network on a bad path - a silent fetch of
+    main's config is exactly the confusion the override exists to remove.
+    """
+    from core.config_manager import ConfigManager
+
+    manager = ConfigManager.__new__(ConfigManager)
+    manager._max_attempts, manager._timeout = 1, 1
+
+    urls = []
+    original_get = requests.get
+    requests.get = lambda url, **k: urls.append(url) or (_ for _ in ()).throw(
+        requests.RequestException("no network in this test"))
+    original_env = {k: os.environ.get(k) for k in (ConfigManager.LOCAL_ENV, ConfigManager.BRANCH_ENV)}
+    try:
+        os.environ.pop(ConfigManager.LOCAL_ENV, None)
+        os.environ.pop(ConfigManager.BRANCH_ENV, None)
+        manager._fetch_json(ConfigManager.CONFIG_FILE_PATH)
+        assert f"/{ConfigManager.GITHUB_BRANCH}/" in urls[-1], urls[-1]
+
+        os.environ[ConfigManager.BRANCH_ENV] = 'some-branch'
+        manager._fetch_json(ConfigManager.CONFIG_FILE_PATH)
+        assert '/some-branch/' in urls[-1], urls[-1]
+
+        # A readable directory returns the file on disk, and never reaches the network.
+        os.environ[ConfigManager.LOCAL_ENV] = REPO_ROOT
+        before = len(urls)
+        local = manager._fetch_json(ConfigManager.CONFIG_FILE_PATH)
+        assert local and 'github' in local, local
+        assert len(urls) == before, "local override still hit the network"
+
+        os.environ[ConfigManager.LOCAL_ENV] = os.path.join(REPO_ROOT, 'no-such-dir')
+        assert manager._fetch_json(ConfigManager.CONFIG_FILE_PATH) is None
+        assert len(urls) == before, "a bad local override fell through to the network"
+    finally:
+        requests.get = original_get
+        for key, value in original_env.items():
+            os.environ.pop(key, None)
+            if value is not None:
+                os.environ[key] = value
+
+
 if __name__ == '__main__':
     test_import_does_not_fetch()
     test_linux_enabled()
@@ -163,4 +207,5 @@ if __name__ == '__main__':
     test_check_version_never_prompts()
     test_shipped_config_json()
     test_tool_version()
+    test_config_source_override()
     print('ok')
