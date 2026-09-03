@@ -40,3 +40,6 @@ temp/
 
 /dist
 *.spec
+
+# Workflow run artifacts (plan-implement-review design ledgers)
+.claude/ledger/
