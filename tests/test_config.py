@@ -143,6 +143,17 @@ def test_shipped_config_json():
     for name in ('convai_http_plugin', 'convai_pak_manager'):
         assert 'engine_specific' not in github[name], name
 
+    # A shipped pin is legitimate, so this checks its shape, not its absence: a typo'd key
+    # is silently ignored, and a twin tag pins a version that does not exist.
+    for name, plugin in github.items():
+        override = plugin.get('override')
+        if override is None:
+            continue
+        assert set(override) <= {'version', 'asset'}, (name, override)
+        prefix = plugin.get('marketplace_prefix')
+        version = override.get('version', '')
+        assert not (prefix and version.startswith(prefix)), (name, version)
+
     assert 'editor' not in cfg['directory_names']
     assert 'uploader_asset' not in cfg['asset_names']
     assert cfg['asset_names']['convenience_pack'] == 'ConvaiConveniencePack'

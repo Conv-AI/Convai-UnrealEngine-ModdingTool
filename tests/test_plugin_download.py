@@ -2,6 +2,7 @@
 
 Plain asserts, no network: run with `python tests/test_plugin_download.py`.
 """
+import contextlib
 import copy
 import json
 import logging
@@ -126,7 +127,7 @@ def test_resolve_plugin_release():
 
     # A marketplace release ahead of the newest compiled tag is not the one users are
     # meant to be on: the twin of the newest compiled release still wins.
-    unpaired = [_release('marketplace-4.0.0-beta.30', True, _marketplace('5.8'))] + LIVE_ORDERING
+    unpaired = [_release('marketplace-4.0.0-beta.30', True, _marketplace('5.8'))] + copy.deepcopy(LIVE_ORDERING)
     release, asset, source = resolve(unpaired, '5.8', PATTERNS, PREFIX)
     assert release['tag_name'] == 'marketplace-4.0.0-beta.29.1', release['tag_name']
 
@@ -137,6 +138,173 @@ def test_resolve_plugin_release():
 
     assert resolve(LIVE_ORDERING, '5.9', PATTERNS, PREFIX) is None
     assert resolve([], '5.8', PATTERNS, PREFIX) is None
+
+
+def _set_override(**pins):
+    """Set convai_plugin's override in the seeded config; no arguments clears it."""
+    plugin = config._remote_config.config['github']['convai_plugin']
+    if pins:
+        plugin['override'] = pins
+    else:
+        plugin.pop('override', None)
+
+
+def _errors_from(call):
+    """Run call with the error log captured, returning (result, messages)."""
+    from core.logger import logger as tool_logger
+
+    messages = []
+    original = tool_logger.error
+    tool_logger.error = messages.append
+    try:
+        return call(), messages
+    finally:
+        tool_logger.error = original
+
+
+@contextlib.contextmanager
+def _served(releases=LIVE_ORDERING):
+    """Serve this listing to every download path, and stop before the filesystem."""
+    original = (GitHubManager.get_releases, GitHubManager.get_latest_release,
+                GitHubManager.download_file_from_url, DownloadManager.extract_plugin_zip,
+                PluginManager.post_process_convai_plugin)
+
+    GitHubManager.get_releases = lambda self, repo, per_page=100: releases
+    GitHubManager.get_latest_release = lambda self, repo: releases[0]
+    GitHubManager.download_file_from_url = lambda self, url, file_path, filename: True
+    DownloadManager.extract_plugin_zip = staticmethod(lambda zip_path, project_dir: project_dir)
+    PluginManager.post_process_convai_plugin = staticmethod(lambda project_dir: True)
+    try:
+        yield
+    finally:
+        (GitHubManager.get_releases, GitHubManager.get_latest_release,
+         GitHubManager.download_file_from_url, DownloadManager.extract_plugin_zip,
+         PluginManager.post_process_convai_plugin) = original
+
+
+def _resolution_agrees(engine_version, releases=LIVE_ORDERING):
+    """(pre-check verdict, download verdict) for the override currently in config.
+
+    Both sides read the override themselves, which is the point: they must agree before
+    a user spends ten minutes and ~400MB finding out they don't.
+    """
+    with _served(releases):
+        return (DownloadManager.check_convai_plugin_available(engine_version),
+                DownloadManager.download_plugin_from_github('project', 'convai_plugin',
+                                                            engine_version))
+
+
+def test_override_precheck_agrees_with_download():
+    """T-DL-8: the availability check and the download reach the same verdict on a pin."""
+    try:
+        _set_override(version='4.0.0-beta.24')
+        assert _resolution_agrees('5.5') == (True, True)
+
+        # beta.24 stops at 5.6, so a 5.8 user on this pin is refused - by both readers.
+        assert _resolution_agrees('5.8') == (False, False)
+
+        _set_override(asset='Convai-UE5.8.zip')
+        assert _resolution_agrees('5.8') == (True, True)
+
+        _set_override(version='4.0.0-beta.24', asset='Convai-UE5.8.zip')
+        assert _resolution_agrees('5.8') == (False, False)
+
+        _set_override()
+        assert _resolution_agrees('5.8') == (True, True)
+    finally:
+        _set_override()
+
+
+def test_version_pin_resolves_the_pinned_pair():
+    """T-DL-8: a pin selects a version, and that version's twin is still preferred."""
+    resolve = GitHubManager.resolve_plugin_release
+
+    release, asset, source = resolve(LIVE_ORDERING, '5.5', PATTERNS, PREFIX,
+                                     version='4.0.0-beta.24')
+    assert release['tag_name'] == 'marketplace-4.0.0-beta.24', release['tag_name']
+    assert asset['name'] == 'Convai-UE5.5-marketplace-no-binaries.zip', asset['name']
+    assert source == 'marketplace'
+
+    # A pin constrains the version, not which half of the pair is used: with no twin for
+    # this engine the pinned version's compiled half is installed and stripped, and the
+    # walk-back to beta.23-hotfix that would happen without a pin must not.
+    gapped = copy.deepcopy(LIVE_ORDERING)
+    twin = next(r for r in gapped if r['tag_name'] == 'marketplace-4.0.0-beta.24')
+    twin['assets'] = [a for a in twin['assets'] if '5.5' not in a['name']]
+    release, asset, source = resolve(gapped, '5.5', PATTERNS, PREFIX, version='4.0.0-beta.24')
+    assert release['tag_name'] == '4.0.0-beta.24', release['tag_name']
+    assert asset['name'] == 'Convai-UE5.5.zip', asset['name']
+    assert source == 'compiled'
+
+
+def test_unsatisfiable_pin_fails_closed():
+    """T-DL-8: a pin that cannot be met stops the run; it never falls back to newest."""
+    resolve = GitHubManager.resolve_plugin_release
+
+    # beta.24 ships nothing for 5.8, and beta.29.1 does. Returning that is the one thing
+    # the pin exists to prevent.
+    assert resolve(LIVE_ORDERING, '5.8', PATTERNS, PREFIX, version='4.0.0-beta.24') is None
+    assert resolve(LIVE_ORDERING, '5.8', PATTERNS, PREFIX, version='4.0.0-beta.99') is None
+    assert resolve(LIVE_ORDERING, '5.8', PATTERNS, PREFIX, asset='Convai-nope.zip') is None
+
+    try:
+        _set_override(version='4.0.0-beta.24')
+        with _served():
+            try:
+                DownloadManager.download_modding_dependencies('project', '5.8')
+            except DownloadError as e:
+                assert 'convai_plugin' in str(e), e
+            else:
+                raise AssertionError("an unsatisfiable pin on a critical plugin must abort the run")
+    finally:
+        _set_override()
+
+
+def test_pin_sees_a_prerelease():
+    """T-DL-8: the prerelease filter guards automatic selection, never an explicit pin."""
+    resolve = GitHubManager.resolve_plugin_release
+    listing = [_release('4.0.0-beta.30', True, _compiled('5.8'))] + LIVE_ORDERING
+
+    # Untested by default...
+    assert resolve(listing, '5.8', PATTERNS, PREFIX)[0]['tag_name'] == 'marketplace-4.0.0-beta.29.1'
+
+    # ...but reachable when someone asks for it by name.
+    release, asset, source = resolve(listing, '5.8', PATTERNS, PREFIX, version='4.0.0-beta.30')
+    assert release['tag_name'] == '4.0.0-beta.30', release['tag_name']
+    assert source == 'compiled'
+
+
+def test_pinning_a_twin_tag_is_a_config_error():
+    """T-DL-8: pinning marketplace-X names the wrong half; say which value was meant."""
+    resolve = GitHubManager.resolve_plugin_release
+
+    result, errors = _errors_from(
+        lambda: resolve(LIVE_ORDERING, '5.5', PATTERNS, PREFIX,
+                        version='marketplace-4.0.0-beta.24'))
+    assert result is None
+    assert any('4.0.0-beta.24' in message for message in errors), errors
+
+
+def test_asset_pin_bypasses_engine_matching():
+    """T-DL-8: reach one artifact by name - the one thing asset_patterns cannot do."""
+    resolve = GitHubManager.resolve_plugin_release
+    hotfix = 'Convai-hotfix.zip'
+    listing = copy.deepcopy(LIVE_ORDERING)
+    listing[0]['assets'] += _assets(hotfix)
+    listing[4]['assets'] += _assets(hotfix)
+
+    # No ue5.8 token in the name, so no pattern could ever select it on this plugin.
+    assert GitHubManager.find_matching_asset(_assets(hotfix), ['.zip'], '5.8') is None
+
+    release, asset, source = resolve(listing, '5.8', PATTERNS, PREFIX, asset=hotfix)
+    assert release['tag_name'] == '4.0.0-beta.29.1', release['tag_name']
+    assert asset['name'] == hotfix
+
+    # An asset pin alone is not a version pin: the newest release carrying the filename
+    # wins, and pinning the version too narrows it to that release.
+    release, asset, source = resolve(listing, '5.8', PATTERNS, PREFIX, asset=hotfix,
+                                     version='4.0.0-beta.24')
+    assert release['tag_name'] == '4.0.0-beta.24', release['tag_name']
 
 
 BUILD_CS = '''using UnrealBuildTool;
@@ -319,6 +487,12 @@ if __name__ == '__main__':
     test_asset_matches_engine()
     test_find_matching_asset()
     test_resolve_plugin_release()
+    test_override_precheck_agrees_with_download()
+    test_version_pin_resolves_the_pinned_pair()
+    test_unsatisfiable_pin_fails_closed()
+    test_pin_sees_a_prerelease()
+    test_pinning_a_twin_tag_is_a_config_error()
+    test_asset_pin_bypasses_engine_matching()
     test_set_convai_http_enabled()
     test_strip_to_source()
     test_post_process_convai_plugin()

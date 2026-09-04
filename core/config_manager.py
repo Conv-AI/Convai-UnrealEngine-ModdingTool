@@ -237,6 +237,14 @@ class ConfigManager:
         """Get GitHub asset patterns for a specific plugin."""
         return self.get(f'github.{plugin_name}.asset_patterns', ['.zip'])
     
+    def get_github_override(self, plugin_name: str) -> Dict[str, Any]:
+        """Pinned version and/or asset for a plugin, or {} for normal resolution.
+
+        One accessor for both readers: the availability pre-check and the download must
+        reach the same verdict, and two reads of the key drift.
+        """
+        return self.get(f'github.{plugin_name}.override', {}) or {}
+
     def get_github_post_process(self, plugin_name: str) -> bool:
         """Get whether a plugin needs post-processing after download."""
         return self.get(f'github.{plugin_name}.post_process', False)

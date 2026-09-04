@@ -145,6 +145,7 @@ class DownloadManager:
             repo = config.get_github_repo(plugin_name)
             asset_patterns = config.get_github_asset_patterns(plugin_name)
             needs_post_process = config.get_github_post_process(plugin_name)
+            override = config.get_github_override(plugin_name)
             marketplace_prefix = config.get(f'github.{plugin_name}.marketplace_prefix', '')
             engine_specific = config.get(f'github.{plugin_name}.engine_specific', False)
 
@@ -164,7 +165,9 @@ class DownloadManager:
                 download_dir=download_dir,
                 asset_patterns=asset_patterns,
                 engine_version=engine_version if engine_specific else None,
-                marketplace_prefix=marketplace_prefix
+                marketplace_prefix=marketplace_prefix,
+                version=override.get('version'),
+                asset=override.get('asset')
             )
 
             if not downloaded_file:
@@ -231,11 +234,17 @@ class DownloadManager:
             logger.error(f"Failed to list releases for {repo}")
             return False
 
+        # Same override, read through the same accessor as the download: a pre-check that
+        # greenlights what the resolver then refuses costs ten minutes and ~400MB.
+        override = config.get_github_override("convai_plugin")
+
         resolved = GitHubManager.resolve_plugin_release(
             releases,
             engine_version,
             config.get_github_asset_patterns("convai_plugin"),
-            config.get('github.convai_plugin.marketplace_prefix', '')
+            config.get('github.convai_plugin.marketplace_prefix', ''),
+            override.get('version'),
+            override.get('asset')
         )
         if not resolved:
             logger.error(f"No Convai plugin release provides an asset for Unreal Engine {engine_version}")

@@ -90,6 +90,32 @@ If no `marketplace-*` release carries an asset for your engine, the tool falls b
 to the compiled release for that engine and strips `Binaries/`, `Intermediate/` and
 the `Installed` flag out of it, so both paths end up building from source.
 
+### Pinning a plugin release
+
+Each plugin in `resources/modding_tool_config.json` takes an optional `override`, and
+either member may be set on its own:
+
+```jsonc
+"convai_plugin": {
+  "override": {
+    "version": "4.0.0-beta.24",           // the version, never the marketplace- twin tag
+    "asset": "Convai-UE5.8-hotfix.zip"    // one artifact by exact filename
+  }
+}
+```
+
+A `version` holds everyone on that version and resolves exactly as the newest one would
+- twin preferred, compiled half stripped to source as the fallback. An `asset` reaches
+one file directly, skipping engine matching, so it belongs on one machine
+(`CONVAI_MODDING_CONFIG_DIR=<checkout>`) rather than on `main`: a filename targets a
+single engine and would break every other one.
+
+An override that cannot be satisfied stops the run instead of installing something else,
+so a pin naming a version that misses an engine refuses to build for users on it. That is
+deliberate - see [ADR 0002](docs/adr/0002-plugin-overrides-fail-closed.md). Note also that
+older exes fetch the same config from `main` and ignore the key entirely: a pin is a
+fix-forward lever, not a recall.
+
 ## Publishing from the Pak Manager
 
 Publishing is the Pak Manager plugin's job, not this tool's, but two of its rules

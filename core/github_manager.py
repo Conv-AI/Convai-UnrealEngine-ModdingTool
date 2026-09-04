@@ -134,19 +134,62 @@ class GitHubManager:
 
     @staticmethod
     def resolve_plugin_release(releases: List[Dict], engine_version: str, patterns: List[str],
-                               marketplace_prefix: str) -> Optional[Tuple[Dict, Dict, str]]:
+                               marketplace_prefix: str, version: str = None,
+                               asset: str = None) -> Optional[Tuple[Dict, Dict, str]]:
         """
         Pick the release to install from a repository that publishes each version twice:
         a compiled release and a 'marketplace-' prerelease shipping source without binaries.
 
+        Args:
+            releases: The repository's releases, newest first
+            engine_version: Engine version the asset must be built for
+            patterns: Asset filename patterns
+            marketplace_prefix: Tag prefix of the source-only releases
+            version: Pinned version - the compiled release's tag, never the twin's. The
+                pair logic still runs, but only against that version.
+            asset: Pinned asset filename, matched exactly. Engine matching is bypassed.
+
         Returns:
             (release, asset, 'marketplace' | 'compiled') or None if no release has an
-            asset for this engine.
+            asset for this engine. An override that cannot be satisfied returns None
+            rather than falling back to another version (ADR 0002).
         """
+        if version and marketplace_prefix and version.startswith(marketplace_prefix):
+            logger.error(
+                f"Override names the twin tag {version}: pin the version "
+                f"{version[len(marketplace_prefix):]}, not the twin tag {version}")
+            return None
+
+        def half(tag: str) -> str:
+            return 'marketplace' if marketplace_prefix and tag.startswith(marketplace_prefix) else 'compiled'
+
+        if asset:
+            # An asset pin reaches one artifact directly: engine matching is bypassed,
+            # which is the one thing asset_patterns cannot express.
+            for release in releases:
+                tag = release.get('tag_name', '')
+                if version and tag not in (version, marketplace_prefix + version):
+                    continue
+                for candidate in release.get('assets', []):
+                    if candidate.get('name') == asset:
+                        return release, candidate, half(tag)
+            where = f"release {version}" if version else "any release"
+            logger.error(f"Pinned asset {asset} is not in {where}")
+            return None
+
         marketplace = [r for r in releases if r.get('tag_name', '').startswith(marketplace_prefix)]
         compiled = [r for r in releases
                     if not r.get('tag_name', '').startswith(marketplace_prefix)
                     and not r.get('prerelease', False)]
+
+        if version:
+            # A pin is the deliberate override of the default, so it also sees releases
+            # the prerelease filter hides from automatic selection.
+            marketplace = [r for r in releases if r.get('tag_name') == marketplace_prefix + version]
+            compiled = [r for r in releases if r.get('tag_name') == version]
+            if not marketplace and not compiled:
+                logger.error(f"Pinned version {version} has no release in this repository")
+                return None
 
         def match(release: Dict, pats: List[str]) -> Optional[Dict]:
             return GitHubManager.find_matching_asset(release.get('assets', []), pats, engine_version)
@@ -157,23 +200,25 @@ class GitHubManager:
             twin_tag = marketplace_prefix + compiled[0].get('tag_name', '')
             for release in marketplace:
                 if release.get('tag_name') == twin_tag:
-                    asset = match(release, patterns)
-                    if asset:
-                        return release, asset, 'marketplace'
+                    picked = match(release, patterns)
+                    if picked:
+                        return release, picked, 'marketplace'
                     break
 
         for release in marketplace:
-            asset = match(release, patterns)
-            if asset:
-                return release, asset, 'marketplace'
+            picked = match(release, patterns)
+            if picked:
+                return release, picked, 'marketplace'
 
         # No source release for this engine: the compiled one is stripped back to source
         # after install, so both paths end up identical.
         for release in compiled:
-            asset = match(release, ['.zip'])
-            if asset:
-                return release, asset, 'compiled'
+            picked = match(release, ['.zip'])
+            if picked:
+                return release, picked, 'compiled'
 
+        if version:
+            logger.error(f"Pinned version {version} has no asset for Unreal Engine {engine_version}")
         return None
 
     def download_file_from_url(self, url: str, file_path: str, filename: str) -> bool:
@@ -229,21 +274,24 @@ class GitHubManager:
     def download_plugin_from_release(self, repo: str, download_dir: str,
                                    version: str = None, asset_patterns: List[str] = None,
                                    engine_version: str = None,
-                                   marketplace_prefix: str = None) -> Optional[str]:
+                                   marketplace_prefix: str = None,
+                                   asset: str = None) -> Optional[str]:
         """
         Download a plugin from a GitHub release.
 
         Args:
             repo: Repository in 'owner/repo' format
             download_dir: Directory to save the downloaded file
-            version: Specific version tag, or None for latest
+            version: Pinned version, or None for latest
             asset_patterns: List of filename patterns to match
             engine_version: Engine version the asset must be built for, or None for any
             marketplace_prefix: Tag prefix of the source-only releases, or None to use
                 the latest release as-is
+            asset: Pinned asset filename, matched exactly. Engine matching is bypassed.
 
         Returns:
-            Path to downloaded file or None if failed
+            Path to downloaded file or None if failed. An override that cannot be
+            satisfied fails here rather than installing something else (ADR 0002).
         """
         patterns = asset_patterns or ['.zip']
 
@@ -253,19 +301,36 @@ class GitHubManager:
                 logger.error(f"Failed to list releases for {repo}")
                 return None
 
-            resolved = self.resolve_plugin_release(releases, engine_version, patterns, marketplace_prefix)
+            resolved = self.resolve_plugin_release(releases, engine_version, patterns,
+                                                   marketplace_prefix, version, asset)
             if not resolved:
-                logger.error(f"No {repo} release has an asset for Unreal Engine {engine_version}")
+                if version or asset:
+                    logger.error(f"Override on {repo} could not be satisfied, so nothing was installed")
+                else:
+                    logger.error(f"No {repo} release has an asset for Unreal Engine {engine_version}")
                 logger.debug("Available marketplace tags: " + ", ".join(
                     r.get('tag_name', '') for r in releases
                     if r.get('tag_name', '').startswith(marketplace_prefix)))
                 return None
 
-            release_info, asset, source = resolved
-            asset_name = asset.get('name')
+            release_info, selected, source = resolved
+            asset_name = selected.get('name')
             logger.info(f"Resolved {repo} {release_info.get('tag_name')} ({source}): {asset_name}")
         else:
-            if version:
+            if asset and not version:
+                # Nothing names the release holding a pinned filename, and
+                # /releases/latest would only ever see one release.
+                releases = self.get_releases(repo)
+                if releases is None:
+                    logger.error(f"Failed to list releases for {repo}")
+                    return None
+                release_info = next(
+                    (r for r in releases
+                     if any(a.get('name') == asset for a in r.get('assets', []))), None)
+                if not release_info:
+                    logger.error(f"Pinned asset {asset} is in no {repo} release")
+                    return None
+            elif version:
                 release_info = self.get_release_by_tag(repo, version)
             else:
                 release_info = self.get_latest_release(repo)
@@ -279,26 +344,34 @@ class GitHubManager:
             logger.debug(f"Found release: {release_name} ({release_tag})")
 
             assets = release_info.get('assets', [])
-            asset = self.find_matching_asset(assets, patterns, engine_version)
+            if asset:
+                selected = next((a for a in assets if a.get('name') == asset), None)
+            else:
+                selected = self.find_matching_asset(assets, patterns, engine_version)
 
-            if not asset:
-                logger.error(f"No suitable asset found in release.")
+            if not selected:
+                if asset:
+                    logger.error(f"Pinned asset {asset} is not in {repo} {release_tag}")
+                elif version:
+                    logger.error(f"Pinned version {version} of {repo} has no suitable asset")
+                else:
+                    logger.error(f"No suitable asset found in release.")
                 logger.debug("Available assets:")
                 for a in assets:
                     logger.debug(f"  - {a.get('name', 'Unknown')}")
                 return None
 
-            asset_name = asset.get('name')
+            asset_name = selected.get('name')
             logger.debug(f"Selected asset: {asset_name}")
 
 
-        if not asset.get('browser_download_url'):
+        if not selected.get('browser_download_url'):
             logger.error("No download URL found in asset")
             return None
         
         # Download the asset
         file_path = os.path.join(download_dir, asset_name)
-        if self.download_file_from_url(asset.get('browser_download_url'), file_path, asset_name):
+        if self.download_file_from_url(selected.get('browser_download_url'), file_path, asset_name):
             return file_path
         else:
             logger.error(f"Failed to download {asset_name}")
