@@ -14,6 +14,11 @@ from core.config_manager import config
 from core.exceptions import ConfigurationError
 from core.logger import logger
 
+# The Pak Manager numbers a project's first Chunk 10, so a project this tool sets up lands
+# on the same id the plugin would have minted.
+DEFAULT_CHUNK_ID = 10
+
+
 class FileUtilityManager:
     """Utility methods for filesystem and metadata operations."""
 
@@ -223,17 +228,47 @@ class FileUtilityManager:
         return re.sub(re.escape(old_value), replace_with_matching_case, text, flags=re.IGNORECASE)
 
     @staticmethod
-    def save_metadata(project_dir: str, metadata: Dict[str, Any]) -> None:
+    def find_metadata_file(project_dir: str) -> Optional[str]:
         """
-        Save metadata to ModdingMetaData.txt in the project directory.
-        Merges with existing metadata if present (new data takes precedence).
+        The metadata file the Pak Manager would read, or None when the project has none.
+
+        The plugin migrates the flat file into its Chunk and reads per-chunk first, so this
+        resolves in the plugin's order. The chunk id is whatever the project's Primary Asset
+        Label declares, so it is globbed rather than assumed.
         """
         essentials_dir = os.path.join(project_dir, config.get_essentials_dir_name())
-        metadata_file = os.path.join(essentials_dir, config.get_metadata_file_name())
-        
-        # Ensure ConvaiEssentials directory exists
-        os.makedirs(essentials_dir, exist_ok=True)
-        
+        stem = os.path.splitext(config.get_metadata_file_name())[0]
+
+        # glob.escape: a project path may contain [ or ], which are glob wildcards.
+        chunks = os.path.join(glob.escape(essentials_dir), 'ChunkId_*')
+        for extension in ('.json', '.txt'):
+            # sorted() only to keep the pick deterministic if a project breaks the
+            # one-chunk-per-project rule; the plugin reads a single chunk either way.
+            found = sorted(glob.glob(os.path.join(chunks, f"{stem}_*{extension}")))
+            if found:
+                return found[0]
+
+        flat = os.path.join(essentials_dir, config.get_metadata_file_name())
+        return flat if os.path.exists(flat) else None
+
+    @staticmethod
+    def save_metadata(project_dir: str, metadata: Dict[str, Any]) -> None:
+        """
+        Save metadata to the project's Chunk, creating ChunkId_10 when there is none.
+        Merges with existing metadata if present (new data takes precedence).
+
+        A project that still carries the flat file is written in place: the plugin migrates
+        it into the Chunk itself, and it knows the chunk id this tool would have to guess.
+        """
+        metadata_file = FileUtilityManager.find_metadata_file(project_dir)
+        if metadata_file is None:
+            metadata_file = os.path.join(
+                project_dir, config.get_essentials_dir_name(),
+                f"ChunkId_{DEFAULT_CHUNK_ID}",
+                f"{os.path.splitext(config.get_metadata_file_name())[0]}_{DEFAULT_CHUNK_ID}.json")
+
+        os.makedirs(os.path.dirname(metadata_file), exist_ok=True)
+
         # Merge with existing data if present
         existing_data = {}
         if os.path.exists(metadata_file):
@@ -255,22 +290,21 @@ class FileUtilityManager:
         except Exception as e:
             logger.error(f"Failed to save metadata: {e}")
 
-    @staticmethod 
+    @staticmethod
     def get_metadata(project_dir: str) -> Dict[str, Any]:
         """
-        Get metadata from ModdingMetaData.txt in the project directory.
+        Get metadata from the project's Chunk, falling back to the flat legacy file.
         Returns a dictionary with the metadata, or an empty dict if file doesn't exist or can't be read.
         """
-        essentials_dir = os.path.join(project_dir, config.get_essentials_dir_name())
-        metadata_file = os.path.join(essentials_dir, config.get_metadata_file_name())
-        
+        metadata_file = FileUtilityManager.find_metadata_file(project_dir)
+
         # Debug information
         logger.debug(f"Looking for metadata file at: {metadata_file}")
-        
-        if not os.path.exists(metadata_file):
+
+        if metadata_file is None:
             logger.warning("Metadata file not found. This may be a legacy project")
             return {}
-        
+
         try:
             with open(metadata_file, "r", encoding="utf-8") as file:
                 metadata = json.load(file)

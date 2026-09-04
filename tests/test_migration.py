@@ -303,6 +303,67 @@ def _fake_project(root: str, engine_association: str) -> str:
     return project_dir
 
 
+def test_metadata_resolves_the_chunk_before_the_flat_file():
+    """The Pak Manager moves ModdingMetaData.txt into ChunkId_<N>/ and reads per-chunk first.
+
+    Reading only the flat path returns {} on any project whose panel has been opened once,
+    and Update discovers that after it has already deleted the SDK plugins.
+    """
+    stem = os.path.splitext(config.get_metadata_file_name())[0]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        essentials = os.path.join(tmp, config.get_essentials_dir_name())
+        os.makedirs(essentials)
+        assert FileUtilityManager.get_metadata(tmp) == {}
+
+        flat = os.path.join(essentials, config.get_metadata_file_name())
+        with open(flat, 'w', encoding='utf-8') as handle:
+            json.dump({'plugin_name': 'flat'}, handle)
+        assert FileUtilityManager.get_metadata(tmp)['plugin_name'] == 'flat'
+
+        # 7, not 10: a ChunkId_10 fixture passes against a hardcoded read and proves nothing.
+        chunk = os.path.join(essentials, 'ChunkId_7')
+        os.makedirs(chunk)
+        legacy = os.path.join(chunk, f'{stem}_7.txt')
+        with open(legacy, 'w', encoding='utf-8') as handle:
+            json.dump({'plugin_name': 'chunk-txt'}, handle)
+        assert FileUtilityManager.get_metadata(tmp)['plugin_name'] == 'chunk-txt'
+
+        with open(os.path.join(chunk, f'{stem}_7.json'), 'w', encoding='utf-8') as handle:
+            json.dump({'plugin_name': 'chunk-json'}, handle)
+        assert FileUtilityManager.get_metadata(tmp)['plugin_name'] == 'chunk-json'
+
+        # An existing chunk is written in place - never a second one beside it.
+        FileUtilityManager.save_metadata(tmp, {'api_key': 'KEY'})
+        assert sorted(os.listdir(essentials)) == ['ChunkId_7', config.get_metadata_file_name()]
+        assert FileUtilityManager.get_metadata(tmp)['api_key'] == 'KEY'
+        assert FileUtilityManager.get_metadata(tmp)['plugin_name'] == 'chunk-json'
+
+
+def test_new_project_metadata_lands_in_chunk_10():
+    """A project with no Chunk gets ChunkId_10 - the id the Pak Manager mints for the first one.
+
+    No flat file: the plugin resolves ChunkId_<N> from the Primary Asset Label, which this
+    tool does not author, so a fresh project needs that label added before Create chunk works.
+    """
+    stem = os.path.splitext(config.get_metadata_file_name())[0]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        FileUtilityManager.save_metadata(tmp, {'plugin_name': 'Plug'})
+
+        essentials = os.path.join(tmp, config.get_essentials_dir_name())
+        assert os.listdir(essentials) == ['ChunkId_10']
+        assert os.listdir(os.path.join(essentials, 'ChunkId_10')) == [f'{stem}_10.json']
+        assert FileUtilityManager.get_metadata(tmp)['plugin_name'] == 'Plug'
+
+
+def test_metadata_survives_a_glob_wildcard_in_the_project_path():
+    """A project directory may contain [ or ], which glob reads as a character class."""
+    with tempfile.TemporaryDirectory() as tmp:
+        project_dir = os.path.join(tmp, 'pr[o]j')
+        FileUtilityManager.save_metadata(project_dir, {'plugin_name': 'Plug'})
+        assert FileUtilityManager.get_metadata(project_dir)['plugin_name'] == 'Plug'
+
 def test_migrate_refuses_without_a_plugin_release():
     """Migrate updates the user's only copy in place, and that update deletes Plugins/ConvAI
     before it downloads. With no release for the engine it must stop before the delete."""
@@ -437,5 +498,8 @@ if __name__ == '__main__':
     test_migrate_refuses_without_a_plugin_release()
     test_update_refuses_when_prerequisites_fail()
     test_configure_assets_without_pak_manager()
+    test_metadata_resolves_the_chunk_before_the_flat_file()
+    test_new_project_metadata_lands_in_chunk_10()
+    test_metadata_survives_a_glob_wildcard_in_the_project_path()
     test_run_unreal_build_streams_and_fails()
     print('ok')
