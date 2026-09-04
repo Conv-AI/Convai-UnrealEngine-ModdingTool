@@ -92,35 +92,38 @@ def test_uploader_config_fallback():
 
 def test_check_version_never_prompts():
     """T-CFG-4: check_version is exact-match only and never reads stdin."""
-    from core.github_manager import GitHubManager
+    from core.config_manager import RemoteConfig, config
     from core.version_manager import VersionManager, LATEST_RELEASE_URL
 
     assert LATEST_RELEASE_URL.startswith("https://github.com/")
 
-    original_input, original_fetch = builtins.input, GitHubManager.get_file_content
+    def serve(version_data):
+        """The startup load's own copy of Version.json - the one CONVAI_MODDING_CONFIG_DIR
+        redirects. check_version reading anything else ignores a local checkout."""
+        config._remote_config = RemoteConfig(config={}, version_data=version_data,
+                                             uploader_config={})
+
+    saved = config._remote_config
+    original_input = builtins.input
     builtins.input = lambda *a, **k: (_ for _ in ()).throw(AssertionError("input called"))
     try:
-        GitHubManager.get_file_content = staticmethod(
-            lambda *a, **k: '{"modding-tool-version": "9.9.9"}')
+        serve({"modding-tool-version": "9.9.9"})
         assert VersionManager.check_version("3.1.0") is False
 
-        GitHubManager.get_file_content = staticmethod(
-            lambda *a, **k: '{"modding-tool-version": "3.1.0"}')
+        serve({"modding-tool-version": "3.1.0"})
         assert VersionManager.check_version("3.1.0") is True
 
         # A check that could not be made is None, not False: the boot screen sends an
         # outdated build to the download page, and an unreachable GitHub is not that.
-        GitHubManager.get_file_content = staticmethod(lambda *a, **k: None)
+        # An unreadable Version.json loads as {}.
+        serve({})
         assert VersionManager.check_version("3.1.0") is None
 
-        GitHubManager.get_file_content = staticmethod(lambda *a, **k: "not json")
-        assert VersionManager.check_version("3.1.0") is None
-
-        GitHubManager.get_file_content = staticmethod(lambda *a, **k: '{"other-key": "3.1.0"}')
+        serve({"other-key": "3.1.0"})
         assert VersionManager.check_version("3.1.0") is None
     finally:
         builtins.input = original_input
-        GitHubManager.get_file_content = original_fetch
+        config._remote_config = saved
 
 
 def test_shipped_config_json():

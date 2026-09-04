@@ -1,13 +1,9 @@
 # core/self_VersionManager.py
-import json
 from typing import Optional
 
-from core.github_manager import GitHubManager
+from core.config_manager import config
 from core.logger import logger
 
-REPO = "Conv-AI/Convai-UnrealEngine-ModdingTool"
-BRANCH = "main"
-VERSION_JSON_PATH = "Version.json"
 LATEST_RELEASE_URL = "https://github.com/Conv-AI/Convai-UnrealEngine-ModdingTool/releases/latest"
 
 class VersionManager:
@@ -26,25 +22,18 @@ class VersionManager:
         logger.section("Updater")
         logger.step("Checking for updates...")
 
-        raw = GitHubManager.get_file_content(REPO, BRANCH, VERSION_JSON_PATH)
-        if not raw:
-            logger.info("Could not fetch Version.json")
-            logger.info(f"Download the latest version here: {LATEST_RELEASE_URL}")
-            return None
-
-        try:
-            data = json.loads(raw)
-            remote_version = data.get("modding-tool-version", "").strip()
-        except Exception:
-            logger.info("Invalid Version.json")
-            logger.info(f"Download the latest version here: {LATEST_RELEASE_URL}")
-            return None
+        # Read the Version.json the config already loaded, not a second copy off main:
+        # that load is the one that honours CONVAI_MODDING_CONFIG_DIR, so a separate
+        # fetch here would compare a local checkout against main and call it up to date.
+        version_data = config.remote_config.version_data
+        remote_version = str(version_data.get("modding-tool-version", "")).strip()
 
         logger.info(f"Current version: {current_version}")
         logger.info(f"Latest version:  {remote_version or 'unknown'}")
 
         if not remote_version:
-            logger.info("Version.json carries no modding-tool-version")
+            logger.info("Version.json is unreadable or carries no modding-tool-version")
+            logger.info(f"Download the latest version here: {LATEST_RELEASE_URL}")
             return None
 
         if current_version == remote_version:
