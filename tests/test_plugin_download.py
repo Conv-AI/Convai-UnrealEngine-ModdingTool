@@ -209,6 +209,10 @@ def test_override_precheck_agrees_with_download():
         _set_override(version='4.0.0-beta.24', asset='Convai-UE5.8.zip')
         assert _resolution_agrees('5.8') == (False, False)
 
+        # The shipped config spells both members out empty, and empty is not a pin.
+        _set_override(version='', asset='')
+        assert _resolution_agrees('5.8') == (True, True)
+
         _set_override()
         assert _resolution_agrees('5.8') == (True, True)
     finally:
