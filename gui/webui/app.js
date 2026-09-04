@@ -108,8 +108,9 @@ function demoTransport() {
         if (fail && index === titles.length - 2) {
           emit('log', { runId, line: `[12:00:0${index}] ERROR: the build could not be started.` });
           emit('runFinished', {
-            runId, ok: false, subject, folder: null, notes: null,
+            runId, ok: false, subject, folder, notes: null, uproject: null,
             error: 'The project could not be built. Unreal Engine reported a compile error.',
+            rebuild: folder ? { folder, enginePath: 'C:\Program Files\Epic Games\UE_5.8' } : null,
           });
           return;
         }
@@ -120,6 +121,8 @@ function demoTransport() {
         if (index === titles.length - 1) {
           emit('runFinished', {
             runId, ok: true, subject, folder, error: null,
+            uproject: folder ? `${folder}\${subject}.uproject` : null,
+            rebuild: null,
             notes: folder && folder.includes('_5.5')
               ? 'Engine version set to 5.5. Convai plugin rebuilt against the new engine. Target.cs files patched.'
               : null,
@@ -139,6 +142,7 @@ function demoTransport() {
       return { version: '1.4.2', upToDate: true, requiredVersion: '1.4.2', account: { ...account } };
     },
     'projects.list': () => ({ projects: withAccount() }),
+    'project.rebuild': ({ folder }) => fakeRun(['Building project'], 'Demo', folder, false),
     'project.validateName': ({ name }) => {
       const trimmed = (name || '').trim();
       if (!trimmed) return { problem: 'Enter a project name.' };
@@ -1235,6 +1239,10 @@ function renderRunResult() {
   const finished = run.finished;
   const host = $('#run-result');
   const openable = !!finished.folder;
+  const launchable = !!finished.uproject;
+  // A compile failure leaves a project that is set up and only needs building again, so it
+  // gets its own wording and a retry that skips the download the whole flow would redo.
+  const rebuild = finished.rebuild || null;
 
   host.innerHTML = finished.ok ? `
     <div class="result ok">
@@ -1244,18 +1252,23 @@ function renderRunResult() {
         <div class="details-box" id="notes-box" hidden><pre>${esc(finished.notes)}</pre></div>` : ''}
     </div>
     <div class="page-actions">
-      ${openable ? '<button class="primary tall" id="open-folder" type="button">Open project folder</button>' : ''}
-      <button class="${openable ? '' : 'primary'} tall" id="back-to-projects" type="button">Back to projects</button>
+      ${launchable ? '<button class="primary tall" id="open-project" type="button">Open project</button>' : ''}
+      ${openable ? `<button class="${launchable ? '' : 'primary'} tall" id="open-folder" type="button">Open project folder</button>` : ''}
+      <button class="${launchable || openable ? '' : 'primary'} tall" id="back-to-projects" type="button">Back to projects</button>
       ${openable ? '' : '<span class="helper">The project folder is no longer there.</span>'}
     </div>` : `
     <div class="result fail">
-      <h2>${esc(finished.subject || run.subject)} was not completed.</h2>
+      <h2>${rebuild
+        ? `${esc(finished.subject || run.subject)} did not compile.`
+        : `${esc(finished.subject || run.subject)} was not completed.`}</h2>
       <p>${esc(finished.error || 'The run stopped before it finished.')}</p>
+      ${rebuild ? '<p class="helper">Everything else is in place. Compiling again is all that is left.</p>' : ''}
       <button class="quiet flat-left" id="show-log" type="button" style="margin-top:10px">View technical details</button>
     </div>
     <div class="page-actions">
-      ${run.retry ? '<button class="primary tall" id="run-retry" type="button">Try again</button>' : ''}
-      <button class="${run.retry ? '' : 'primary'} tall" id="back-to-projects" type="button">Back to projects</button>
+      ${rebuild ? '<button class="primary tall" id="run-rebuild" type="button">Retry compilation</button>' : ''}
+      ${run.retry && !rebuild ? '<button class="primary tall" id="run-retry" type="button">Try again</button>' : ''}
+      <button class="${run.retry || rebuild ? '' : 'primary'} tall" id="back-to-projects" type="button">Back to projects</button>
     </div>`;
 
   on('#notes-toggle', 'click', (event) => {
@@ -1264,9 +1277,16 @@ function renderRunResult() {
     event.currentTarget.setAttribute('aria-expanded', String(!box.hidden));
     event.currentTarget.textContent = box.hidden ? 'What changed' : 'Hide what changed';
   });
+  on('#open-project', 'click', () => send('path.open', { path: finished.uproject }).catch((error) => setStatus(failure(error))));
   on('#open-folder', 'click', () => send('path.open', { path: finished.folder }).catch((error) => setStatus(failure(error))));
   on('#back-to-projects', 'click', () => showShelf(finished.folder || run.folder));
   on('#run-retry', 'click', () => { const retry = run.retry; state.run = null; retry(); });
+  on('#run-rebuild', 'click', () => {
+    const subject = finished.subject || run.subject;
+    send('project.rebuild', rebuild)
+      .then((data) => startRun(data.runId, `Compiling ${subject}`, subject, rebuild.folder))
+      .catch((error) => setStatus(failure(error)));
+  });
   on('#show-log', 'click', () => {
     state.run.logOpen = true;
     $('#log-box').hidden = false;
@@ -1276,7 +1296,8 @@ function renderRunResult() {
     scrollLogToEnd();
   });
 
-  const primary = $('#open-folder') || $('#run-retry') || $('#back-to-projects');
+  const primary = $('#open-project') || $('#open-folder') || $('#run-rebuild')
+    || $('#run-retry') || $('#back-to-projects');
   if (primary) { primary.focus(); state.primary = () => primary.click(); }
 }
 

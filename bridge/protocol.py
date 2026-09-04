@@ -37,10 +37,15 @@ MIGRATE_STEPS = [
 ]
 CREATE_STEPS = [
     ("Setting up the project", "setting up project structure"),
-    ("Creating the content plugin", "creating content plugin"),
+    ("Creating the Modding Plugin", "creating modding plugin"),
     ("Downloading Convai dependencies", "downloading convai dependencies"),
     ("Enabling required plugins", "enabling required plugins"),
     ("Configuring project assets", "configuring project assets"),
+    ("Building project", "building project"),
+]
+# A compile on its own, after one of the flows above got that far and the compiler failed.
+# The dispatcher logs this phrase itself; there is no flow behind it to copy it from.
+REBUILD_STEPS = [
     ("Building project", "building project"),
 ]
 

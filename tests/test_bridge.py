@@ -238,7 +238,9 @@ def test_run_streams_and_cleans_up():
         finished = wait_for(events, 'runFinished')['data']
         assert finished == {'runId': run_id, 'ok': True, 'subject': 'MyScene_01',
                             'folder': project_dir, 'notes': 'Convai plugin 3.2.0 replaced 3.1.0.',
-                            'error': None}, finished
+                            'error': None,
+                            'uproject': os.path.join(project_dir, 'MyScene_01.uproject'),
+                            'rebuild': None}, finished
 
         assert len(logger.logger.handlers) == handlers, 'the queue handler must go with the run'
         logger.step('after the run')
@@ -310,6 +312,89 @@ def test_failed_run_reports_its_reason():
             states = [s['state'] for s in envelope['data']['steps']]
             assert states != ['done'] * len(UPDATE_STEPS), states
 
+
+def test_a_finished_run_names_the_project_file():
+    """T-BRIDGE-14: success carries the .uproject, so the UI can offer to open the project.
+
+    Globbed, never composed from the folder: a migrated copy lives in `<name>_<version>/`
+    but still holds `<name>.uproject`.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        project_dir = make_project(tmp, name='MyScene_01')
+        moved = os.path.join(tmp, 'MyScene_01_5.8')
+        os.rename(project_dir, moved)
+
+        bridge, events = make_dispatcher(tmp, flows={'update': lambda: None})
+        call(bridge, 'project.update', dir=moved, enginePath=ENGINE)
+        finished = wait_for(events, 'runFinished')['data']
+
+        assert finished['ok'] is True, finished
+        assert finished['uproject'] == os.path.join(moved, 'MyScene_01.uproject'), finished
+        assert finished['rebuild'] is None, finished
+
+
+def test_only_a_compile_failure_offers_a_rebuild():
+    """T-BRIDGE-15: rerunning the compiler helps after a BuildError and nowhere else.
+
+    Everything earlier leaves the project half-built, so compiling that again would report
+    the same failure more slowly.
+    """
+    from core.exceptions import BuildError, ProjectError
+
+    def raiser(exception):
+        def flow():
+            logger.step('Loading project configuration...')
+            raise exception
+        return flow
+
+    with tempfile.TemporaryDirectory() as tmp:
+        project_dir = make_project(tmp)
+
+        bridge, events = make_dispatcher(tmp, flows={'update': raiser(ProjectError('too early'))})
+        call(bridge, 'project.update', dir=project_dir, enginePath=ENGINE)
+        assert wait_for(events, 'runFinished')['data']['rebuild'] is None
+
+        bridge, events = make_dispatcher(tmp, flows={'update': raiser(BuildError('C2039'))})
+        call(bridge, 'project.update', dir=project_dir, enginePath=ENGINE)
+        finished = wait_for(events, 'runFinished')['data']
+        assert finished['rebuild'] == {'folder': project_dir, 'enginePath': ENGINE}, finished
+        # The failure still reads as a failure; nothing is presented as built.
+        assert finished['ok'] is False and finished['uproject'] is None, finished
+
+
+def test_rebuild_compiles_and_nothing_else():
+    """T-BRIDGE-16: project.rebuild runs the compiler against what the flow left behind.
+
+    It must not re-enter a flow: a rebuild that downloaded again would delete the SDK
+    plugins the failed run had already installed.
+    """
+    built = []
+    original_build = UnrealEngineManager.__dict__['run_unreal_build']
+    UnrealEngineManager.run_unreal_build = lambda self: built.append((self.ue_dir, self.project_name,
+                                                                     self.project_dir))
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            moved = os.path.join(tmp, 'MyScene_01_5.8')
+            os.rename(make_project(tmp, name='MyScene_01'), moved)
+
+            def must_not_run():
+                raise AssertionError('a rebuild re-entered the update flow')
+
+            bridge, events = make_dispatcher(tmp, flows={'update': must_not_run})
+            data(call(bridge, 'project.rebuild', folder=moved, enginePath=ENGINE))
+            finished = wait_for(events, 'runFinished')['data']
+
+            assert finished['ok'] is True, finished
+            # The project name comes off the .uproject, not off the folder it sits in.
+            assert built == [(ENGINE, 'MyScene_01', moved)], built
+
+            # A project that has been moved or deleted since the run, and a lost engine.
+            failure(call(bridge, 'project.rebuild', folder=os.path.join(tmp, 'gone'),
+                         enginePath=ENGINE), 'notFound')
+            failure(call(bridge, 'project.rebuild', folder=moved, enginePath=''), 'invalidEngine')
+            assert built == [(ENGINE, 'MyScene_01', moved)], 'a refused rebuild compiles nothing'
+    finally:
+        UnrealEngineManager.run_unreal_build = original_build
 
 def test_one_run_at_a_time():
     """T-BRIDGE-9: a second run is refused, and the first one's answers are intact."""
@@ -504,6 +589,9 @@ try:
     test_run_streams_and_cleans_up()
     test_migrate_run_names_the_copy()
     test_failed_run_reports_its_reason()
+    test_a_finished_run_names_the_project_file()
+    test_only_a_compile_failure_offers_a_rebuild()
+    test_rebuild_compiles_and_nothing_else()
     test_one_run_at_a_time()
     test_engine_choice_survives_a_reset()
     test_account_replies_never_carry_the_key()

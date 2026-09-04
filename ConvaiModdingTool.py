@@ -58,7 +58,7 @@ def CreateModdingProject():
     if not ue_manager.build_project_structure():
         raise ProjectError("Failed to build project structure")
     
-    logger.step("Creating content plugin...")
+    logger.step("Creating Modding Plugin...")
     plugin_name = FileUtilityManager.trim_unique_str(FileUtilityManager.generate_unique_str())
     ue_manager.create_content_only_plugin(plugin_name)
     ue_manager.update_ini_files(plugin_name, convai_api_key)

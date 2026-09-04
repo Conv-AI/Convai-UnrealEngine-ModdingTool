@@ -19,12 +19,13 @@ import webbrowser
 from pathlib import Path
 from typing import Callable, Optional
 
-from bridge.protocol import (CREATE_STEPS, MIGRATE_STEPS, UPDATE_STEPS, account_view,
-                             engine_view, error, event, parse_command, project_view, reply,
-                             step_from_line, step_marks, step_titles, steps_view)
+from bridge.protocol import (CREATE_STEPS, MIGRATE_STEPS, REBUILD_STEPS, UPDATE_STEPS,
+                             account_view, engine_view, error, event, parse_command,
+                             project_view, reply, step_from_line, step_marks, step_titles,
+                             steps_view)
 from core.account import DASHBOARD_URL, AccountSession, AuthError, BrowserLogin, _verify_key
 from core.config_manager import config
-from core.exceptions import ConvaiToolError
+from core.exceptions import BuildError, ConvaiToolError
 from core.file_utility_manager import FileUtilityManager
 from core.input_manager import InputManager
 from core.logger import logger
@@ -49,6 +50,18 @@ def _auth_code(exc: AuthError) -> str:
     if "verify that api key" in message:
         return "invalidKey"
     return "network" if "reach convai" in message else "unknown"
+
+
+def _find_uproject(folder: Optional[str]) -> Optional[str]:
+    """The project file in `folder`, or None.
+
+    Globbed rather than composed: a migrated copy sits in `<name>_<version>/` but keeps
+    the original project's `<name>.uproject`, so the folder does not name the file.
+    """
+    if not folder or not os.path.isdir(folder):
+        return None
+    found = sorted(Path(folder).glob("*.uproject"))
+    return str(found[0]) if found else None
 
 
 def _version_manager():
@@ -102,6 +115,7 @@ class Dispatcher:
             "project.create": self._create,
             "project.update": self._update,
             "project.migrate": self._migrate,
+            "project.rebuild": self._rebuild,
             "path.open": self._open_path,
             "log.save": self._save_log,
             "toolchain.install": self._install_toolchain,
@@ -375,7 +389,8 @@ class Dispatcher:
         manager.is_metahuman = bool(params.get("isMetahuman"))
         manager.unreal_engine_path = engine
         return self._start(run_id, self.flows["create"], CREATE_STEPS, subject=name,
-                           folder=os.path.join(str(manager.get_script_dir()), name))
+                           folder=os.path.join(str(manager.get_script_dir()), name),
+                           engine=engine)
 
     def _update(self, params: dict) -> dict:
         self._refuse_if_busy()
@@ -389,7 +404,8 @@ class Dispatcher:
         manager.unreal_engine_path = engine
         manager.project_dir = project_dir
         return self._start(run_id, self.flows["update"], UPDATE_STEPS,
-                           subject=os.path.basename(project_dir.rstrip("\\/")), folder=project_dir)
+                           subject=os.path.basename(project_dir.rstrip("\\/")), folder=project_dir,
+                           engine=engine)
 
     def _migrate(self, params: dict) -> dict:
         self._refuse_if_busy()
@@ -414,7 +430,40 @@ class Dispatcher:
         manager.target_unreal_engine_path = target_engine
         return self._start(run_id, self.flows["migrate"], MIGRATE_STEPS,
                            subject=destination["destinationName"],
-                           folder=destination["destinationDir"])
+                           folder=destination["destinationDir"],
+                           # Migrate compiles the copy with the target engine, not the current one.
+                           engine=target_engine)
+
+    def _rebuild(self, params: dict) -> dict:
+        """Recompile a project a flow already finished setting up.
+
+        Offered after a compile failure only. Nothing here downloads, patches or writes
+        the project, so a rebuild is safe to press repeatedly while the user fixes
+        whatever the compiler complained about.
+        """
+        self._refuse_if_busy()
+        folder = str(params.get("folder") or "")
+        uproject = _find_uproject(folder)
+        if uproject is None:
+            raise BridgeError("notFound",
+                              "That project is no longer where the run left it, so there is "
+                              "nothing to compile.")
+        # Taken as given, not re-validated by version type: this recompiles exactly what the
+        # failed run compiled, and Migrate compiles with the target engine, not the current one.
+        # An engine uninstalled since then surfaces as run_unreal_build's own BuildError.
+        engine = str(params.get("enginePath") or "")
+        if not engine:
+            raise BridgeError("invalidEngine",
+                              "The tool does not know which Unreal Engine to compile with.")
+        name = os.path.splitext(os.path.basename(uproject))[0]
+
+        def compile_only() -> None:
+            logger.step("Building project...")
+            UnrealEngineManager(engine, name, folder).run_unreal_build()
+
+        run_id = self._claim()
+        return self._start(run_id, compile_only, REBUILD_STEPS, subject=name, folder=folder,
+                           engine=engine)
 
     def _require_account(self, reason: str) -> None:
         if not self.account.is_signed_in:
@@ -435,8 +484,13 @@ class Dispatcher:
             return self._run_id
 
     def _start(self, run_id: str, flow: Callable[[], Optional[str]], steps: list,
-               subject: str, folder: str) -> dict:
-        """Run `flow` on a worker, streaming its log and its steps until it reports back."""
+               subject: str, folder: str, engine: Optional[str] = None) -> dict:
+        """Run `flow` on a worker, streaming its log and its steps until it reports back.
+
+        `engine` is the installation the flow compiles with. It rides along so a run that
+        got as far as the compiler can offer to rerun just the compile, which is minutes
+        rather than the whole flow's re-download.
+        """
         titles, marks = step_titles(steps), step_marks(steps)
         self._log_subject = subject
         records: queue.Queue = queue.Queue()
@@ -468,10 +522,12 @@ class Dispatcher:
                     self._emit(event("steps", {"runId": run_id, "steps": steps_view(titles, index)}))
 
         def work() -> None:
-            ok, notes, failure = True, None, None
+            ok, notes, failure, rebuildable = True, None, None, False
             try:
                 result = flow()
                 notes = result if isinstance(result, str) else None
+            except BuildError as exc:
+                ok, failure, rebuildable = False, str(exc), True
             except ConvaiToolError as exc:
                 ok, failure = False, str(exc)
             except Exception as exc:
@@ -489,8 +545,14 @@ class Dispatcher:
             if ok:
                 self._emit(event("steps", {"runId": run_id,
                                            "steps": steps_view(titles, len(titles), finished=True)}))
-            self._emit(event("runFinished", {"runId": run_id, "ok": ok, "subject": subject,
-                                             "folder": folder, "notes": notes, "error": failure}))
+            self._emit(event("runFinished", {
+                "runId": run_id, "ok": ok, "subject": subject, "folder": folder,
+                "notes": notes, "error": failure,
+                "uproject": _find_uproject(folder) if ok else None,
+                # Only a compile failure: everything earlier leaves the project half-built,
+                # and rerunning the compiler on that reports the same error more slowly.
+                "rebuild": {"folder": folder, "enginePath": engine}
+                           if rebuildable and engine else None}))
             with self._lock:
                 if self._run_id == run_id:
                     self._run_id = None
@@ -516,7 +578,7 @@ class Dispatcher:
     def _open_path(self, params: dict) -> dict:
         path = str(params.get("path") or "")
         if not path or not os.path.exists(path):
-            raise BridgeError("notFound", "That folder is no longer there.")
+            raise BridgeError("notFound", "That is no longer where the tool left it.")
         try:
             os.startfile(path)
         except OSError as exc:
