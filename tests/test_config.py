@@ -6,6 +6,7 @@ import builtins
 import json
 import logging
 import os
+import re
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -146,6 +147,19 @@ def test_shipped_config_json():
     assert 'uploader_asset' not in cfg['asset_names']
     assert cfg['asset_names']['convenience_pack'] == 'ConvaiConveniencePack'
 
+    # The Pak Manager resolves the SDK mount by plugin name and treats /ConvAI/ and
+    # /ConvaiHTTP/ as the only content its dependency gather may skip. Rename either here
+    # and the gather starts copying that plugin into every creator's Modding Plugin, with
+    # nothing in this tool failing: find_plugin_directory just stops matching, so the SDK
+    # swap, the source patching and the MetaHumans removal all silently no-op.
+    assert cfg['file_names']['plugin_files'] == {
+        'convai': 'ConvAI.uplugin',
+        'convai_http': 'ConvaiHTTP.uplugin',
+        'convai_pak_manager': 'ConvaiPakManager.uplugin',
+    }, cfg['file_names']['plugin_files']
+    assert cfg['project_settings']['required_plugins'][:3] == [
+        'ConvAI', 'ConvaiHTTP', 'ConvaiPakManager'], cfg['project_settings']['required_plugins']
+
 
 def test_tool_version():
     """T-CFG-6: the exe's version and the one it fetches to compare against must match.
@@ -156,10 +170,55 @@ def test_tool_version():
     import ConvaiModdingTool
 
     with open(os.path.join(REPO_ROOT, 'Version.json'), encoding='utf-8') as handle:
-        shipped = json.load(handle)['modding-tool-version']
+        version_data = json.load(handle)
 
+    shipped = version_data['modding-tool-version']
     assert ConvaiModdingTool.TOOL_VERSION == shipped, (ConvaiModdingTool.TOOL_VERSION, shipped)
 
+    # Also value-agnostic. The Pak Manager plugin reads target-ue-version off main on every
+    # panel open and fails open on anything it cannot parse, so a typo raises no banner
+    # there and silently degrades three things here: the engine getters fall back to
+    # hardcoded versions, the engine-match checks stop matching any installation, and every
+    # version-specific compatibility rule drops.
+    for key in ('current-ue-version', 'target-ue-version'):
+        value = version_data.get(key)
+        assert isinstance(value, str) and re.fullmatch(r'\d+\.\d+', value), (key, value)
+
+
+def test_shipped_uploader_config():
+    """T-CFG-8: the publish policy main serves is one the Pak Manager can act on.
+
+    The plugin fetches this before every Publish and refuses the run if it cannot. Nothing
+    downstream of a merge checks it, so a `chore:` commit that drops a key reaches every
+    installed editor at once.
+    """
+    from core.config_manager import DEFAULT_ASSET_UPLOADER_CONFIG
+
+    path = os.path.join(REPO_ROOT, 'resources', 'asset_uploader_config.json')
+    with open(path, encoding='utf-8') as handle:
+        policy = json.load(handle)
+
+    platforms = policy['unreal-engine']
+    assert set(platforms) == {'windows', 'linux'}, platforms.keys()
+
+    packaged = []
+    for name, platform in platforms.items():
+        assert isinstance(platform['should-package'], bool), (name, platform)
+        if not platform['should-package']:
+            continue
+        packaged.append(name)
+        # The plugin's parser clears the configuration before each platform block, so a
+        # packaged platform cannot inherit the Shipping default and the whole policy is
+        # refused instead.
+        assert platform.get('configuration'), (name, platform)
+
+    raw = policy['raw-project-upload']
+    assert isinstance(raw, bool), raw
+    assert packaged or raw, 'a policy that packages nothing and uploads nothing is a misread'
+
+    # The exe bundles no data files, so an unreachable fetch falls back to a copy of this
+    # policy typed out in Python. Nothing else makes the two move together.
+    assert policy == DEFAULT_ASSET_UPLOADER_CONFIG, 'flip the fallback in config_manager.py too'
 
 def test_config_source_override():
     """T-CFG-7: the overrides let a config change be tested before it reaches main.
@@ -212,5 +271,6 @@ if __name__ == '__main__':
     test_check_version_never_prompts()
     test_shipped_config_json()
     test_tool_version()
+    test_shipped_uploader_config()
     test_config_source_override()
     print('ok')

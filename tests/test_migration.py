@@ -177,8 +177,21 @@ def test_update_modding_dependencies_report():
             os.makedirs(pack)
             open(os.path.join(pack, 'a.uasset'), 'w').close()
 
+            # The Pak Manager gathers the Entry Point's out-of-plugin dependencies into the
+            # Modding Plugin and repoints references at the copies, so an Update that deleted
+            # or regenerated that folder would destroy copies other packages already use.
+            # The .uplugin matters: without it, a delete written the idiomatic way
+            # (find_plugin_directory) matches nothing and the content assert stays green.
+            gathered = os.path.join(tmp, 'Plugins', 'Plug', 'Content', 'Gathered.uasset')
+            os.makedirs(os.path.dirname(gathered))
+            open(gathered, 'w').close()
+            descriptor = os.path.join(tmp, 'Plugins', 'Plug', 'Plug.uplugin')
+            with open(descriptor, 'w', encoding='utf-8') as handle:
+                json.dump({'FileVersion': 3, 'CanContainContent': True}, handle)
+
             manager = UnrealEngineManager(tmp, 'P', tmp)
             report = manager.update_modding_dependencies()
+            assert os.path.exists(gathered) and os.path.exists(descriptor), 'Update ate the Modding Plugin'
             notes = report.pop('notes')
             assert report == {'old_plugin_version': '3.6.9',
                               'new_plugin_version': NEW_VERSION,
@@ -194,6 +207,7 @@ def test_update_modding_dependencies_report():
             assert notes == written
 
             second = manager.update_modding_dependencies()
+            assert os.path.exists(gathered) and os.path.exists(descriptor), 'Update ate the Modding Plugin'
             assert second.pop('notes') is None, second
             assert second == {'old_plugin_version': NEW_VERSION,
                               'new_plugin_version': NEW_VERSION,

@@ -277,6 +277,9 @@ class UnrealEngineManager:
         logger.subsection("Analyzing Current Installation")
 
         content_dir = os.path.join(self.project_dir, config.get_content_dir_name())
+        # Plugins/<plugin_name>/ is off-limits to everything below. The Pak Manager copies the
+        # Entry Point's out-of-plugin dependencies into it and repoints references at those
+        # copies, so deleting or regenerating the folder breaks packages already pointing there.
         paths_to_delete = []
 
         # V4 is a source build, so the main plugin is replaced too, not left in place
