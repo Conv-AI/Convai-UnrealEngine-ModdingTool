@@ -26,7 +26,8 @@ config._remote_config = RemoteConfig(
 
 from bridge import dispatcher as dispatcher_module
 from bridge.dispatcher import Dispatcher
-from bridge.protocol import (MIGRATE_STEPS, UPDATE_STEPS, error, event, match_step,
+from bridge.protocol import (CREATE_STEPS, MIGRATE_STEPS, REBUILD_STEPS, UPDATE_STEPS,
+                             error, event, match_step,
                              parse_command, project_view, reply, step_from_line, step_marks,
                              step_titles)
 from core.input_manager import InputManager
@@ -129,6 +130,13 @@ def test_step_markers_track_the_real_log():
     included, since those are what a loose matcher trips over.
     """
     flows = {
+        'create': (CREATE_STEPS, [
+            'Setting up project structure...', 'Creating Modding Plugin...',
+            'Downloading Convai dependencies...', 'Enabling required plugins...',
+            'Saving project metadata...', 'Configuring project assets...',
+            'Patching plugin source for engine compatibility...', 'Building project...',
+        ]),
+        'rebuild': (REBUILD_STEPS, ['Building project...']),
         'update': (UPDATE_STEPS, [
             'Loading project configuration...', 'Checking project engine version...',
             'Ensuring toolchain for UE 5.8...', 'Updating Convai dependencies...',

@@ -7,7 +7,7 @@ integration. It creates a project from the blank template, installs the Convai
 plugins, wires up the API key and project settings, and builds the project.
 
 The home screen is a project shelf: every modding project the tool can see, with
-its engine version and asset type, and one-click Update and Migrate. A project is
+its engine version and Asset Type, and one-click Update and Migrate. A project is
 any folder next to the tool's executable that contains a `ConvaiEssentials` folder
 and a `.uproject` file, so keep the exe in the directory where your projects live.
 
@@ -29,9 +29,10 @@ Fill in the form on the New project screen:
 
 - **Name** - 1 to 20 characters, letters, digits and underscores only, cannot start
   with a digit, and cannot match a folder that already exists next to the exe.
-- **Convai API key** - masked as you type. If you already have a project on the
-  shelf, the tool offers to reuse the key stored in its `ModdingMetaData.txt`.
-- **Asset type** - Scene or Avatar, with a MetaHuman option.
+- **Convai API key** - taken from the Convai account you are signed in to.
+- **Asset Type** - Scene or Avatar, with a MetaHuman option. Fixed for the life of
+  the project: the Pak Manager keys its publish payload off this string, and Update
+  and Migrate read it back rather than asking again.
 - **Unreal Engine path** - detected from the registry; Browse to point at a
   different installation. The path is validated before the run starts.
 
@@ -48,6 +49,11 @@ destructive by design:
   `/ConvAI/ConvaiConveniencePack/Sample/BP_SampleGameMode.BP_SampleGameMode_C`
 - writes `ConvaiMigrationNotes.md` into the project when any of that actually
   changed something, and shows the same notes on the done screen
+
+Update never touches `Plugins/<generated>/`, your Modding Plugin. The Pak Manager
+copies the Entry Point's out-of-plugin dependencies into that folder and repoints
+references at the copies, so deleting or regenerating it would break packages that
+already point there.
 
 Updating a project that is already on V4 changes nothing and writes no notes file.
 
@@ -84,6 +90,28 @@ If no `marketplace-*` release carries an asset for your engine, the tool falls b
 to the compiled release for that engine and strips `Binaries/`, `Intermediate/` and
 the `Installed` flag out of it, so both paths end up building from source.
 
+## Publishing from the Pak Manager
+
+Publishing is the Pak Manager plugin's job, not this tool's, but two of its rules
+decide how you lay a project out.
+
+**Publishable work goes in `Plugins/<generated>/Content/`** - your Modding Plugin.
+The **Entry Point** you publish must live under that plugin's mount, and the Pak
+Manager re-checks that at publish and at package, not only when you pick it. The
+project's own `Content/` is scratch: anything you keep there and reference gets
+*copied* into the Modding Plugin, leaving two copies that then drift apart.
+
+**The dependency gather has one sharp edge.** When you pick an Entry Point, the Pak
+Manager offers to copy its outside dependencies into the Modding Plugin and repoint
+the references at the copies. Everything outside the plugin is copied - `/Game/`
+content and engine content alike - except the Convai SDK's own `/ConvAI/` and
+`/ConvaiHTTP/` mounts. The originals stay where they are, so from then on edit the
+copies. Adding a new `/Game/` or engine reference **after** you picked the Entry
+Point does not re-trigger the gather: re-pick the Entry Point, or use
+**Dependencies...**, before you publish.
+
+**One Chunk per project.** A second Asset means a second project.
+
 ## Troubleshooting
 
 - **See the log** - run the exe with `--console` to keep the log console visible.
@@ -112,6 +140,23 @@ every distributed exe immediately, which means config changes that depend on new
 must ship in the same release as that code, together with the `Version.json` bump.
 `check_version` compares the version strings exactly, so a bump moves every user at once.
 
+Only the first of the three is fatal when it cannot be fetched. `Version.json` falls back
+to hardcoded engine versions, and the publish policy falls back to a copy of itself in
+`core/config_manager.py`.
+
+**Two of these files have a second reader.** The Pak Manager plugin, which ships on its own
+schedule, fetches them straight off `main` too:
+
+| File | Keys it reads | When |
+| --- | --- | --- |
+| `Version.json` | `target-ue-version` | every time its panel opens; banners on a Major.Minor mismatch with the running editor |
+| `resources/asset_uploader_config.json` | `unreal-engine.<platform>.should-package`, `.configuration`, `raw-project-upload` | before every Publish; a failed fetch refuses the run |
+
+So a merge to `main` touching either file is a production deploy for every installed
+editor, with no plugin release in between. Both are shape-checked in `tests/test_config.py`;
+that is a developer-local guard, not a merge gate. Note this tool itself reads only
+`unreal-engine.linux.should-package` out of the policy - the rest is served, not consumed.
+
 ## Project structure
 
 A project the tool creates or updates:
@@ -119,14 +164,39 @@ A project the tool creates or updates:
 ```
 YourProject/
 ├── Config/                 # DefaultEngine.ini, DefaultGame.ini, DefaultInput.ini
-├── Content/                # your project content
+├── Content/                # scratch - publishable work goes in the Modding Plugin
 ├── Plugins/
 │   ├── ConvAI/             # V4 plugin source, compiled by UBT
 │   ├── ConvaiHTTP/
 │   ├── ConvaiPakManager/
-│   └── <generated>/        # content-only plugin holding your uploaded assets
+│   └── <generated>/        # the Modding Plugin - what you publish lives here
 ├── Source/                 # project sources and Target.cs files
-├── ConvaiEssentials/       # ModdingMetaData.txt and downloaded archives
+├── ConvaiEssentials/       # see below - never move, rename or delete this
 ├── YourProject.uproject
 └── ConvaiMigrationNotes.md # only written when an update migrated the project
 ```
+
+### ConvaiEssentials
+
+**Never move, rename or delete this folder.** It is the only place the published Asset's
+identity is recorded, and there is no recovery path if it is lost - no update, no delete,
+just an orphaned Asset on Convai's side.
+
+```
+ConvaiEssentials/
+├── *.zip                              # this tool's download scratch
+└── ChunkId_<N>/
+    ├── ModdingMetaData_<N>.json       # written by this tool
+    ├── Draft_<N>.json                 # Pak Manager
+    ├── Thumbnail_<N>.png              # Pak Manager
+    └── Env_<host>_<8hex>/             # one per backend Environment
+        ├── CreateAssetData_<N>.json   # THE AssetID - irreplaceable
+        ├── PakMetaData_<N>.json       # Pak Manager
+        └── RawArchive_<N>.txt         # Pak Manager
+```
+
+This tool writes `ModdingMetaData_<N>.json` and cleans up its own `.zip` files, and
+touches nothing else under `ChunkId_<N>/`. A project set up by this tool uses Chunk 10,
+the id the Pak Manager mints for a project's first Chunk. A project that still carries the
+older flat `ConvaiEssentials/ModdingMetaData.txt` is left as it is - the Pak Manager
+migrates it into the Chunk itself, and it knows the Chunk id.

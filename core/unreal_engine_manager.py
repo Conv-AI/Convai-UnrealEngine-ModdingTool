@@ -229,7 +229,7 @@ class UnrealEngineManager:
             'Version': 1,
             'VersionName': '1.0',
             'FriendlyName': plugin_name,
-            'Description': f"{plugin_name} content-only plugin.",
+            'Description': f"{plugin_name} Modding Plugin.",
             'Category': 'Other',
             'CreatedBy': 'Convai modding tool',
             'CanContainContent': True,
@@ -237,7 +237,7 @@ class UnrealEngineManager:
         }
         with open(up_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
-        logger.debug(f"Created content plugin: {plugin_name}")
+        logger.debug(f"Created Modding Plugin: {plugin_name}")
 
     def update_ini_files(self, plugin_name: str, api_key: str) -> None:
         logger.debug("Updating project configuration files...")
@@ -398,7 +398,7 @@ class UnrealEngineManager:
         Args:
             asset_type: Type of asset (scene/avatar)
             is_metahuman: Whether the project uses MetaHuman
-            plugin_name: Name of the content plugin
+            plugin_name: Name of the Modding Plugin
             api_key: Convai API key
 
         Returns:
@@ -628,7 +628,7 @@ class UnrealEngineManager:
 
         Args:
             project_dir (str): The path to your Unreal project directory.
-            plugin_name (str): The name of the content-only plugin.
+            plugin_name (str): The name of the Modding Plugin.
         """
         # Ensure the Config directory exists
         config_dir = os.path.join(project_dir, config.get_config_dir_name())
