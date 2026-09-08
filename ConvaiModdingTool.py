@@ -13,7 +13,7 @@ from core.input_manager import InputManager
 from core.logger import logger, suppress_external_logging
 from core.unreal_engine_manager import UnrealEngineManager
 
-TOOL_VERSION = "3.0.6"
+TOOL_VERSION = "4.0.0"
 
 def get_script_dir():
     if getattr(sys, 'frozen', False):
