@@ -33,7 +33,12 @@ if errorlevel 1 (
 REM The UI is files, not code: without --add-data the exe starts with nothing to show.
 REM pywebview injects its own JS into the page (--collect-data) and picks its backend at
 REM runtime, so nothing imports it statically (--hidden-import).
-python -m PyInstaller %SCRIPT_NAME% --onefile --noconfirm --icon=%ICON_FILE% --name=%EXE_NAME% ^
+REM --windowed is the only way to not get a console: a console-subsystem exe is given its
+REM window by Windows before any of our code runs, and on Windows 11 that window belongs to
+REM Windows Terminal, so ShowWindow(GetConsoleWindow()) hides a pseudo-console nobody sees.
+REM The logger and every child process are set up for having no stdout; `--console` opens
+REM one on demand.
+python -m PyInstaller %SCRIPT_NAME% --onefile --windowed --noconfirm --icon=%ICON_FILE% --name=%EXE_NAME% ^
   --add-data "gui/webui;gui/webui" ^
   --collect-data webview ^
   --hidden-import webview.platforms.edgechromium ^

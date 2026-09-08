@@ -387,7 +387,8 @@ class DownloadManager:
                     os.startfile(installer_path)
                 except Exception as e:
                     logger.debug(f"os.startfile failed, falling back to Popen: {e}")
-                    subprocess.Popen([installer_path], shell=True)
+                    subprocess.Popen([installer_path], shell=True,
+                                     creationflags=subprocess.CREATE_NO_WINDOW)
 
                 # The installer is a detached GUI, so completion is detected by polling for
                 # its output rather than by waiting on a prompt no GUI could answer.
@@ -401,7 +402,8 @@ class DownloadManager:
             else:
                 # We have admin privileges, install normally
                 install_command = [installer_path, "/S", f"/D={toolchain_path}"]
-                result = subprocess.run(install_command, check=True, capture_output=True, text=True)
+                result = subprocess.run(install_command, check=True, capture_output=True, text=True,
+                                        creationflags=subprocess.CREATE_NO_WINDOW)
                 logger.info(f"🔧 Installer completed successfully")
             
             # Verify installation by checking if toolchain directory exists and has build folder
@@ -601,7 +603,8 @@ class DownloadManager:
                         f"Start-Process powershell -ArgumentList '-Command \"Set-ItemProperty -Path ''HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'' -Name ''{var_name}'' -Value ''{var_value}'' -Type ExpandString\"' -Verb RunAs -Wait"
                     ]
                     
-                    result = subprocess.run(ps_command, timeout=60, capture_output=True, text=True)
+                    result = subprocess.run(ps_command, timeout=60, capture_output=True, text=True,
+                                            creationflags=subprocess.CREATE_NO_WINDOW)
                     
                     if result.returncode == 0:
                         logger.info(f"✅ Set {var_name} as system environment variable with elevation")

@@ -1,4 +1,3 @@
-import ctypes
 import os
 from pathlib import Path
 import sys
@@ -225,41 +224,7 @@ def MigrateModdingProject() -> Optional[str]:
     return notes
 
 
-def _hide_own_console():
-    """Hide the console window the exe opened for itself.
-
-    The build stays console=True because the logger and the UBT child both write to
-    stdout. The console is ours alone - i.e. the exe was double-clicked - when every
-    process attached to it is this process or, in the onefile build, the bootloader
-    parent that spawned it and waits on the same console. A developer's terminal shows
-    up as a foreign pid and keeps its window.
-
-    The ppid half assumes ConvaiAssetUploader.spec stays onefile. A onedir build has
-    no bootloader parent, so a shell that launched it is the ppid and its window
-    would be hidden; drop the getppid line if the spec ever changes.
-    """
-    if "--console" in sys.argv:
-        return
-
-    kernel32 = ctypes.windll.kernel32
-    console_window = kernel32.GetConsoleWindow()
-    if not console_window:
-        return
-
-    processes = (ctypes.c_uint32 * 16)()
-    count = kernel32.GetConsoleProcessList(processes, len(processes))
-    if not 0 < count <= len(processes):
-        return
-
-    owners = {os.getpid()}
-    if getattr(sys, "frozen", False):
-        owners.add(os.getppid())
-    if set(processes[:count]) <= owners:
-        ctypes.windll.user32.ShowWindow(console_window, 0)
-
-
 def main():
-    _hide_own_console()
     suppress_external_logging()
 
     from gui.host import run_gui

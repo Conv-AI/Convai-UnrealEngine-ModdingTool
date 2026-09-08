@@ -140,8 +140,8 @@ Point does not re-trigger the gather: re-pick the Entry Point, or use
 
 ## Troubleshooting
 
-- **See the log** - run the exe with `--console` to keep the log console visible.
-  Everything the tool logs also appears in the GUI's log panel.
+- **See the log** - run the exe with `--console` to open a log console alongside the
+  window. Everything the tool logs also appears in the GUI's log panel.
 - **Build failures** - UnrealBuildTool writes its own log to
   `%LOCALAPPDATA%\UnrealBuildTool\Log.txt`; that is where the real compile error is.
 - **"No Convai plugin release is available for Unreal Engine x.y"** - there is no

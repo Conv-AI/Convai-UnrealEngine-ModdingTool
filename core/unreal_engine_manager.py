@@ -203,6 +203,7 @@ class UnrealEngineManager:
             text=True,
             encoding='utf-8',
             errors='replace',
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         for line in process.stdout:
             logger.info(line.rstrip())
