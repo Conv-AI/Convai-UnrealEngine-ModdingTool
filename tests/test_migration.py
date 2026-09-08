@@ -165,8 +165,36 @@ def _write_uplugin(project_dir: str, version: str):
         json.dump({'VersionName': version}, handle)
 
 
+def test_uploader_removal_leaves_the_users_own_editor_assets():
+    """T-MIG-7: only the widget this tool copied goes; /Game/Editor is the user's folder.
+
+    The pre-V4 tool copied AssetUploader.uasset into a folder the user is free to keep
+    their own Blutilities in, so the delete is one file, and the folder goes only when
+    nothing is left in it.
+    """
+    original = DownloadManager.__dict__['download_modding_dependencies']
+    DownloadManager.download_modding_dependencies = staticmethod(
+        lambda project_dir, engine_version=None: _write_uplugin(project_dir, NEW_VERSION))
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_uplugin(tmp, '3.6.9')
+            editor = os.path.join(tmp, 'Content', 'Editor')
+            os.makedirs(editor)
+            open(os.path.join(editor, 'AssetUploader.uasset'), 'w').close()
+            open(os.path.join(editor, 'MyTool.uasset'), 'w').close()
+
+            report = UnrealEngineManager(tmp, 'P', tmp).update_modding_dependencies()
+
+            assert report['uploader_removed'] is True, report
+            assert not os.path.exists(os.path.join(editor, 'AssetUploader.uasset'))
+            assert os.path.exists(os.path.join(editor, 'MyTool.uasset')), 'ate a user asset'
+            assert os.path.isdir(editor), 'removed a folder the user still has assets in'
+    finally:
+        DownloadManager.download_modding_dependencies = original
+
+
 def test_update_modding_dependencies_report():
-    """T-MIG-5: the old plugin and the project-level pack are replaced and reported."""
+    """T-MIG-5: the old plugin, the project-level pack and the old uploader widget go."""
     original = DownloadManager.__dict__['download_modding_dependencies']
     DownloadManager.download_modding_dependencies = staticmethod(
         lambda project_dir, engine_version=None: _write_uplugin(project_dir, NEW_VERSION))
@@ -176,6 +204,10 @@ def test_update_modding_dependencies_report():
             pack = os.path.join(tmp, 'Content', 'ConvaiConveniencePack')
             os.makedirs(pack)
             open(os.path.join(pack, 'a.uasset'), 'w').close()
+
+            uploader = os.path.join(tmp, 'Content', 'Editor', 'AssetUploader.uasset')
+            os.makedirs(os.path.dirname(uploader))
+            open(uploader, 'w').close()
 
             # The Pak Manager gathers the Entry Point's out-of-plugin dependencies into the
             # Modding Plugin and repoints references at the copies, so an Update that deleted
@@ -195,8 +227,12 @@ def test_update_modding_dependencies_report():
             notes = report.pop('notes')
             assert report == {'old_plugin_version': '3.6.9',
                               'new_plugin_version': NEW_VERSION,
-                              'pack_removed': True}, report
+                              'pack_removed': True,
+                              'uploader_removed': True}, report
             assert not os.path.exists(pack)
+            # The widget was the only thing in there, so the folder goes with it: an empty
+            # /Game/Editor still shows up in the Content Browser.
+            assert not os.path.exists(os.path.dirname(uploader))
             assert build_migration_notes(**report)
 
             # The pre-delete write says 'unknown'; the download has to replace it, and the
@@ -211,7 +247,8 @@ def test_update_modding_dependencies_report():
             assert second.pop('notes') is None, second
             assert second == {'old_plugin_version': NEW_VERSION,
                               'new_plugin_version': NEW_VERSION,
-                              'pack_removed': False}, second
+                              'pack_removed': False,
+                              'uploader_removed': False}, second
             assert build_migration_notes(**second) is None
     finally:
         DownloadManager.download_modding_dependencies = original
@@ -506,6 +543,7 @@ if __name__ == '__main__':
     test_engine_ini_repoint()
     test_input_manager_never_prompts()
     test_update_modding_dependencies_report()
+    test_uploader_removal_leaves_the_users_own_editor_assets()
     test_notes_survive_a_failed_download()
     test_update_existing_project_propagates()
     test_plugin_availability_checked_before_toolchain()

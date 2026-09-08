@@ -13,6 +13,12 @@ from core.migration import build_migration_notes, write_migration_notes
 from core.plugin_manager import PluginManager
 from core.logger import logger
 
+# What the pre-V4 tool copied out of the Pak Manager into the project itself, mounted as
+# /Game/Editor/AssetUploader. Frozen history rather than config: it names what old builds
+# wrote, so it must not follow a config key that describes what this build writes.
+LEGACY_UPLOADER_WIDGET = os.path.join('Editor', 'AssetUploader.uasset')
+
+
 class UnrealEngineManager:
     """
     Manages Unreal Engine operations: project setup, building, plugins, and INI configuration.
@@ -271,8 +277,8 @@ class UnrealEngineManager:
 
         Returns:
             What changed: old/new Convai plugin VersionName, whether a project-level
-            convenience pack was removed, and the notes text written into the project
-            (None when there was nothing worth reporting).
+            convenience pack and the old uploader widget were removed, and the notes text
+            written into the project (None when there was nothing worth reporting).
         """
         logger.subsection("Analyzing Current Installation")
 
@@ -306,6 +312,14 @@ class UnrealEngineManager:
         if pack_removed:
             paths_to_delete.append(convenience_pack_dir)
 
+        # The Pak Manager stopped shipping content, so the uploader widget this tool used to
+        # copy into the project now points at assets no installation has. It cannot open, and
+        # it is the plugin's file, not the user's, so the update takes it back out.
+        uploader_widget = os.path.join(content_dir, LEGACY_UPLOADER_WIDGET)
+        uploader_removed = os.path.exists(uploader_widget)
+        if uploader_removed:
+            paths_to_delete.append(uploader_widget)
+
         # Get zip files from ConvaiEssentials directory
         zip_dir = os.path.join(self.project_dir, config.get_essentials_dir_name())
         zip_files = []
@@ -317,13 +331,15 @@ class UnrealEngineManager:
             logger.info(f"Found {plugin_count} existing helper plugin(s) to update")
         if pack_removed:
             logger.info("Found a project-level convenience pack to remove")
+        if uploader_removed:
+            logger.info("Found the old uploader widget in the project to remove")
         if zip_files:
             logger.info(f"Found {len(zip_files)} zip file(s) to clean up")
 
         # The deletes below are the point of no return: after them the tree no longer
         # says what was replaced, so the notes are written now and rewritten with the
         # real new version once the download lands.
-        notes = build_migration_notes(old_plugin_version, None, pack_removed)
+        notes = build_migration_notes(old_plugin_version, None, pack_removed, uploader_removed)
         if notes:
             write_migration_notes(self.project_dir, notes)
 
@@ -331,6 +347,10 @@ class UnrealEngineManager:
         if paths_to_delete:
             logger.step(f"Removing {len(paths_to_delete)} existing installation(s)...")
             FileUtilityManager.delete_paths(paths_to_delete)
+        if uploader_removed:
+            # The widget was the only thing this tool ever put in Content/Editor, but the
+            # user may have added their own, so the folder goes only when it is left empty.
+            FileUtilityManager.delete_directory_if_empty(os.path.dirname(uploader_widget))
 
         if zip_files:
             logger.step("Cleaning up old zip files...")
@@ -340,7 +360,7 @@ class UnrealEngineManager:
         DownloadManager.download_modding_dependencies(self.project_dir, self.engine_version)
 
         _, new_plugin_version = self._find_convai_plugin(self.project_dir)
-        notes = build_migration_notes(old_plugin_version, new_plugin_version, pack_removed)
+        notes = build_migration_notes(old_plugin_version, new_plugin_version, pack_removed, uploader_removed)
         if notes:
             write_migration_notes(self.project_dir, notes)
 
@@ -348,6 +368,7 @@ class UnrealEngineManager:
             'old_plugin_version': old_plugin_version,
             'new_plugin_version': new_plugin_version,
             'pack_removed': pack_removed,
+            'uploader_removed': uploader_removed,
             'notes': notes,
         }
 

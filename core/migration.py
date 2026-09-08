@@ -13,7 +13,8 @@ def is_v4_version(version: Optional[str]) -> bool:
 
 def build_migration_notes(old_plugin_version: Optional[str],
                           new_plugin_version: Optional[str],
-                          pack_removed: bool) -> Optional[str]:
+                          pack_removed: bool,
+                          uploader_removed: bool = False) -> Optional[str]:
     """
     Describe a destructive update, or return None when nothing worth reporting happened.
 
@@ -22,8 +23,11 @@ def build_migration_notes(old_plugin_version: Optional[str],
             be read, None if no Convai plugin was installed.
         new_plugin_version: VersionName of the freshly installed plugin.
         pack_removed: Whether a project-level Content/ConvaiConveniencePack was deleted.
+        uploader_removed: Whether a project-level Content/Editor/AssetUploader.uasset was
+            deleted.
     """
-    if not pack_removed and (old_plugin_version is None or is_v4_version(old_plugin_version)):
+    if (not pack_removed and not uploader_removed
+            and (old_plugin_version is None or is_v4_version(old_plugin_version))):
         return None
 
     new_version = new_plugin_version or 'unknown'
@@ -42,6 +46,11 @@ def build_migration_notes(old_plugin_version: Optional[str],
         if pack_removed else ""
     )
 
+    uploader_line = (
+        "The project-level `Content/Editor/AssetUploader.uasset` was removed. "
+        if uploader_removed else ""
+    )
+
     return f"""# Convai modding tool - migration notes
 
 This project was migrated by the Convai modding tool on {date.today().isoformat()}.
@@ -57,6 +66,12 @@ The changes below are not reversible, so read them before opening the project ag
 Any asset that still references `/Game/ConvaiConveniencePack/...` has to be repointed to
 `/ConvAI/ConvaiConveniencePack/...` or it will fail to load. The tool repoints the
 project's default game mode as part of the update.
+
+## The uploader UI moved into the Pak Manager
+
+{uploader_line}The Pak Manager stopped shipping that widget as content, so a copy sitting in
+the project references assets nothing installs any more and fails to open. Upload through the
+Pak Manager's own panel rather than `/Game/Editor/AssetUploader`.
 
 ## The plugin is now built from source
 

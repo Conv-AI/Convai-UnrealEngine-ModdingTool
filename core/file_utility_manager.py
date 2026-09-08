@@ -97,6 +97,17 @@ class FileUtilityManager:
             except Exception as e:
                 logger.error(f"Failed to delete directory {directory_path}: {e}")
 
+    @staticmethod
+    def delete_directory_if_empty(directory_path: str) -> None:
+        """Remove a directory only when nothing is left in it."""
+        if not os.path.isdir(directory_path) or os.listdir(directory_path):
+            return
+        try:
+            os.rmdir(directory_path)
+            logger.debug(f"Deleted empty directory: {os.path.basename(directory_path)}")
+        except OSError as e:
+            logger.error(f"Failed to delete empty directory {directory_path}: {e}")
+
     @staticmethod 
     def delete_file_if_exists(file_path: str) -> None:
         """
