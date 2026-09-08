@@ -41,14 +41,16 @@ class ConfigManager:
 
     # GitHub configuration for fetching config
     GITHUB_REPO = "Conv-AI/Convai-UnrealEngine-ModdingTool"
-    GITHUB_BRANCH = "main"
+    GITHUB_BRANCH = "staging"
     CONFIG_FILE_PATH = "resources/modding_tool_config.json"
     VERSION_FILE_PATH = "Version.json"
     UPLOADER_CONFIG_FILE_PATH = "resources/asset_uploader_config.json"
 
-    # Config ships via main, so a config change cannot be exercised until it is merged -
-    # and merging it early breaks every distributed exe. Set either of these to try one
-    # first: a branch name, or a checkout directory to read the files straight off disk.
+    # Development builds read the config off staging so a config change can be exercised
+    # without merging it to main, where it would reach every released exe. Releases are cut
+    # from main, and main's copy of this constant must stay "main" - never merge this line.
+    # Set either of these to try a change before it even reaches staging: a branch name, or
+    # a checkout directory to read the files straight off disk.
     BRANCH_ENV = "CONVAI_MODDING_CONFIG_BRANCH"
     LOCAL_ENV = "CONVAI_MODDING_CONFIG_DIR"
 
