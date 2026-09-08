@@ -41,7 +41,7 @@
             "asset_patterns": [".zip", "plugin", "pak", "manager"],
             "post_process": false,
             "override": {
-                "version": "",
+                "version": "staging-v3.0.1",
                 "asset": ""
             }
         }
