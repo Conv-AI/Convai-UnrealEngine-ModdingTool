@@ -31,6 +31,12 @@
             "repo": "Conv-AI/Convai-UnrealEngine-HTTP",
             "asset_patterns": [".zip", "plugin", "unreal", "ue"],
             "post_process": false,
+            "cloud_avatars": {
+                "source_commit": "816aa4ea8d645909e9db46bc0c61af78e1449219",
+                "sha256": "7d22a4514eafe6a86ee311fd4dd5dee7acc255fa6c175e0cf373ef1aa8963b09",
+                "engine_versions": ["5.8"],
+                "protocol": "CONVAIHTTP-transfer-v3"
+            },
             "override": {
                 "version": "",
                 "asset": ""
