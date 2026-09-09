@@ -1,4 +1,7 @@
 {
+    "cloud_avatars": {
+        "project_profile_url": "https://raw.githubusercontent.com/Conv-AI/Convai-UnrealEngine-ModdingTool/feat/cloud-avatar-http-config/resources/avatar_studio_project_profile.json"
+    },
     "cross_compilation": {
         "toolchain_versions": {
             "5_5": "v23_clang-18.1.0-rockylinux8",
