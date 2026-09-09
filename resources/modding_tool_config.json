@@ -1,6 +1,6 @@
 {
     "cloud_avatars": {
-        "project_profile_url": "https://raw.githubusercontent.com/Conv-AI/Convai-UnrealEngine-ModdingTool/feat/cloud-avatar-http-config/resources/avatar_studio_project_profile.json"
+        "project_profile_url": "https://raw.githubusercontent.com/Conv-AI/Convai-UnrealEngine-ModdingTool/staging/resources/avatar_studio_project_profile.json"
     },
     "cross_compilation": {
         "toolchain_versions": {
@@ -35,14 +35,13 @@
             "asset_patterns": [".zip", "plugin", "unreal", "ue"],
             "post_process": false,
             "cloud_avatars": {
-                "source_commit": "816aa4ea8d645909e9db46bc0c61af78e1449219",
-                "sha256": "7d22a4514eafe6a86ee311fd4dd5dee7acc255fa6c175e0cf373ef1aa8963b09",
+                "sha256": "71cbe7bdfc97d8ba325721d5c7ba95de304356817a3fbf26f5bff82a79b96451",
                 "engine_versions": ["5.8"],
                 "protocol": "CONVAIHTTP-transfer-v3"
             },
             "override": {
-                "version": "",
-                "asset": ""
+                "version": "staging-v1.2.0",
+                "asset": "Convai-UnrealEngine-HTTP.zip"
             }
         },
         "convai_pak_manager": {
