@@ -30,7 +30,16 @@ DEFAULT_ASSET_UPLOADER_CONFIG = {
             "configuration": "Shipping"
         }
     },
-    "raw-project-upload": True
+    "raw-project-upload": True,
+    "limited-environment": {
+        "dynamic-lights":   {"max": 4,    "severity": "error"},
+        "shadow-lights":    {"max": 0,    "severity": "warning"},
+        "static-meshes":    {"max": 20,   "severity": "error"},
+        "textures":         {"max": 250,  "severity": "error"},
+        "texture-max-size": {"max": 2048, "severity": "error"},
+        "convai-objects":   {"max": 10,   "severity": "warning"},
+        "actors":           {"max": 100,  "severity": "warning"}
+    }
 }
 
 
