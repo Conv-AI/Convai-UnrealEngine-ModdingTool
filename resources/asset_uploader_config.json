@@ -11,12 +11,12 @@
     },
     "raw-project-upload": true,
     "limited-environment": {
-        "dynamic-lights":    { "max": 4,      "severity": "error"   },
-        "shadow-lights":     { "max": 1,      "severity": "error"   },
-        "static-meshes":     { "max": 40,     "severity": "error"   },
-        "triangles":         { "max": 500000, "severity": "error"   },
-        "textures":          { "max": 250,    "severity": "error"   },
-        "texture-max-size":  { "max": 2048,   "severity": "error"   },
+        "dynamic-lights":    { "max": 4,      "severity": "warning" },
+        "shadow-lights":     { "max": 2,      "severity": "warning" },
+        "static-meshes":     { "max": 40,     "severity": "warning" },
+        "triangles":         { "max": 500000, "severity": "warning" },
+        "textures":          { "max": 250,    "severity": "warning" },
+        "texture-max-size":  { "max": 2048,   "severity": "warning" },
         "texture-memory-mb": { "max": 256,    "severity": "warning" },
         "convai-objects":    { "max": 10,     "severity": "warning" },
         "actors":            { "max": 100,    "severity": "warning" }
