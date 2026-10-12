@@ -1,5 +1,13 @@
 {
     "current-ue-version": "5.8",
     "target-ue-version": "5.8",
-    "modding-tool-version": "4.0.0"
+    "modding-tool-version": "4.0.0",
+    "runtime-content-contract": {
+        "id": "avatar-studio-ue58-windows-groom-v1",
+        "product": "Avatar Studio",
+        "assets_root": "https://beta.convai.com/assets",
+        "engine": "5.8",
+        "platform": "Windows",
+        "inventory": "resources/groom_runtime_ue58_windows.json"
+    }
 }

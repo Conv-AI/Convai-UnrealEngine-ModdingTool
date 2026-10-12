@@ -65,6 +65,9 @@
             "ConvaiPakManager",
             "JsonBlueprintUtilities"
         ],
+        "uploader_utility_plugins": [
+            "Interchange"
+        ],
         "metahuman_plugins": [
             "LiveLinkControlRig",
             "AppleARKitFaceSupport"
