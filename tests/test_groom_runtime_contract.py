@@ -24,3 +24,6 @@ def test_groom_target_and_inventory():
         assert package["cooked_header"] in package["cooked_payloads"]
         assert str(Path(package["cooked_header"]).with_suffix(".uexp")).replace("\\", "/") in package["cooked_payloads"]
     assert inventory["audit"]["production"]["verified_packages"] == len(packages)
+    settings = json.loads((root / "resources/modding_tool_config.json").read_text())["project_settings"]
+    assert settings["uploader_utility_plugins"] == ["Interchange"]
+    assert "Interchange" not in settings["required_plugins"]  # Older SDKs reject new names in this legacy list.
