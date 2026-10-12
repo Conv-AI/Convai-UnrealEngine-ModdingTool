@@ -27,3 +27,8 @@ def test_groom_target_and_inventory():
     settings = json.loads((root / "resources/modding_tool_config.json").read_text())["project_settings"]
     assert settings["uploader_utility_plugins"] == ["Interchange"]
     assert "Interchange" not in settings["required_plugins"]  # Older SDKs reject new names in this legacy list.
+
+
+if __name__ == "__main__":
+    test_groom_target_and_inventory()
+    print("ok")
