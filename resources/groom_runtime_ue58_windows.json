@@ -1,0 +1,94 @@
+{
+    "schema_version": 1,
+    "id": "avatar-studio-ue58-windows-groom-v1",
+    "product": "Avatar Studio",
+    "assets_root": "https://beta.convai.com/assets",
+    "engine": "5.8",
+    "platform": "Windows",
+    "native_solver_roots": [
+        "/HairStrands/Emitters/StableSpringsSystem",
+        "/HairStrands/Emitters/StableRodsSystem"
+    ],
+    "audit": {
+        "client_date": "2026-10-12",
+        "runtime_release": "AvatarStudio-HQ-rfctr21",
+        "runtime_version": "1.1.34 HQ-rfctr21",
+        "submitted_changelist": 3319,
+        "native_sha256": "2b873047e6067399a76387c54e9f6366f6df5d76edee1543da7c87e5aa611e2a",
+        "production": {
+            "version": "1.1.32 HQ-rfctr19",
+            "native_sha256": "3189e4dc1a7b18244732b4dca3cef159f8d8c68d06758b4bf2339b1212ab3e11",
+            "release": "R5",
+            "verified_packages": 8
+        }
+    },
+    "packages": [
+        {
+            "package": "/HairStrands/Emitters/StableSpringsSystem",
+            "cooked_header": "Engine/Plugins/Runtime/HairStrands/Content/Emitters/StableSpringsSystem.uasset",
+            "cooked_payloads": [
+                "Engine/Plugins/Runtime/HairStrands/Content/Emitters/StableSpringsSystem.uasset",
+                "Engine/Plugins/Runtime/HairStrands/Content/Emitters/StableSpringsSystem.uexp"
+            ]
+        },
+        {
+            "package": "/HairStrands/Emitters/StableRodsSystem",
+            "cooked_header": "Engine/Plugins/Runtime/HairStrands/Content/Emitters/StableRodsSystem.uasset",
+            "cooked_payloads": [
+                "Engine/Plugins/Runtime/HairStrands/Content/Emitters/StableRodsSystem.uasset",
+                "Engine/Plugins/Runtime/HairStrands/Content/Emitters/StableRodsSystem.uexp"
+            ]
+        },
+        {
+            "package": "/HairStrands/Materials/NiagaraHairMaterial",
+            "cooked_header": "Engine/Plugins/Runtime/HairStrands/Content/Materials/NiagaraHairMaterial.uasset",
+            "cooked_payloads": [
+                "Engine/Plugins/Runtime/HairStrands/Content/Materials/NiagaraHairMaterial.uasset",
+                "Engine/Plugins/Runtime/HairStrands/Content/Materials/NiagaraHairMaterial.uexp"
+            ]
+        },
+        {
+            "package": "/Engine/BasicShapes/Cylinder",
+            "cooked_header": "Engine/Content/BasicShapes/Cylinder.uasset",
+            "cooked_payloads": [
+                "Engine/Content/BasicShapes/Cylinder.uasset",
+                "Engine/Content/BasicShapes/Cylinder.ubulk",
+                "Engine/Content/BasicShapes/Cylinder.uexp"
+            ]
+        },
+        {
+            "package": "/Engine/EngineMaterials/DefaultMaterial",
+            "cooked_header": "Engine/Content/EngineMaterials/DefaultMaterial.uasset",
+            "cooked_payloads": [
+                "Engine/Content/EngineMaterials/DefaultMaterial.uasset",
+                "Engine/Content/EngineMaterials/DefaultMaterial.uexp"
+            ]
+        },
+        {
+            "package": "/Engine/Functions/Engine_MaterialFunctions01/Opacity/CameraDepthFade",
+            "cooked_header": "Engine/Content/Functions/Engine_MaterialFunctions01/Opacity/CameraDepthFade.uasset",
+            "cooked_payloads": [
+                "Engine/Content/Functions/Engine_MaterialFunctions01/Opacity/CameraDepthFade.uasset",
+                "Engine/Content/Functions/Engine_MaterialFunctions01/Opacity/CameraDepthFade.uexp"
+            ]
+        },
+        {
+            "package": "/Engine/EngineMaterials/T_Default_Material_Grid_M",
+            "cooked_header": "Engine/Content/EngineMaterials/T_Default_Material_Grid_M.uasset",
+            "cooked_payloads": [
+                "Engine/Content/EngineMaterials/T_Default_Material_Grid_M.uasset",
+                "Engine/Content/EngineMaterials/T_Default_Material_Grid_M.ubulk",
+                "Engine/Content/EngineMaterials/T_Default_Material_Grid_M.uexp"
+            ]
+        },
+        {
+            "package": "/Engine/EngineMaterials/T_Default_Material_Grid_N",
+            "cooked_header": "Engine/Content/EngineMaterials/T_Default_Material_Grid_N.uasset",
+            "cooked_payloads": [
+                "Engine/Content/EngineMaterials/T_Default_Material_Grid_N.uasset",
+                "Engine/Content/EngineMaterials/T_Default_Material_Grid_N.ubulk",
+                "Engine/Content/EngineMaterials/T_Default_Material_Grid_N.uexp"
+            ]
+        }
+    ]
+}
